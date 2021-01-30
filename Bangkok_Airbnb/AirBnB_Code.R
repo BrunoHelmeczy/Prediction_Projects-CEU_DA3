@@ -518,11 +518,156 @@ DupsRemoved[ManyFalses$Colname] <- NULL
 Bangkok <- cbind(Bangkok,DupsRemoved2)
 Bangkok$amenities <- NULL
 
+
+
+# Start all varnames w l_,d_,n_,flag_,p_,usd_
+oldnames <- Bangkok %>% select(-matches("^l_.*|^d_.*|^n_.*|^flag_.*|^f_.*|^p_.*|^usd_.*")) %>% colnames()
+torename <- match(oldnames,colnames(Bangkok))
+
+colnames(Bangkok)[torename] <- paste0("d_",oldnames)
+
+
+
 #### Save Files ####
 CleanDataPath <- paste0(getwd(),"/Prediction_Projects-CEU_DA3/Bangkok_Airbnb/Data/Clean/")
 # CSV & RDS
 write_csv(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.csv"))
 saveRDS(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.rds"))
 
-BangkokClean <- read_csv(paste0(CleanDataPath,"airbnb_bangkok_cleaned.csv"))
-df <- BangkokClean
+
+df <- Bangkok
+
+#### 1) Group Vars ####
+
+Vars <- colnames(df)
+Vartype <- cbind(unlist(lapply(df,class)))
+VarDescribe <- data.frame(Vars,Vartype)
+rownames(VarDescribe) <- NULL
+
+#### 2) Feature Engineer ####
+
+#### 2.1) Price in USD ####
+# 27 Obs.s > 1000 -> delete
+df <- df %>% filter(usd_price <= 1000)
+df[c("usd_price")] %>% ggplot(aes(x = usd_price)) + 
+  geom_histogram()
+# Skewed as hell -> log transform
+df <- df %>% mutate(usd_price_ln = log(usd_price))
+
+#### 2.2) Numeric Vars ####
+
+
+sapply(df %>% select(matches("^n_",colnames(df))) %>% colnames(),function(x) {
+  hist(df[x])#,main = paste("Histogram of" , x)) 
+})
+
+# To ln: 
+#   n_days_since_last,
+#   n_days_since_1st,
+#   n_accommodates (+ ln, ln^2, ^2, ^3)
+df <- df %>% mutate(
+  n_days_since_last_ln = log(n_days_since_last)  ,
+  n_days_since_1st_ln  = log(n_days_since_1st) ,
+  n_accommodates_ln    = log(n_accommodates),
+  n_accommodates_ln2   = log(n_accommodates)^2,
+  n_accommodates_2     = n_accommodates^2,
+  n_accommodates_2     = n_accommodates^3
+)
+
+# To Throw out: 
+#   n_max_nights, 
+#   n_max_nights_avg
+df <- df %>% select(-c(n_max_nights,n_max_nights_avg))
+
+
+# To Group:
+#   n_bathrooms (1,2,3+ -> NA = 1)
+#   n_reviews_per_month -> 0,1 -> f_has_review_30d
+#   n_review_scores_rating -> 80,90,100
+#   n_number_of_reviews -> 0-50,51-100,100+
+#   n_sales_365 -> 0,90,180,270,360
+#   n_sales_90 -> 0,30,60,90
+#   n_sales_60 -> Empty, non-empty
+#   n_sales_30 -> Empty,Some, Full
+#   n_min_nights -> 1,2,3+
+#   n_beds -> 1,<= 3, 3+
+#   n_bedrooms -> 1,2,3+
+#   n_host_listing -> 1, 1+ (Single-,Multi- Listings)
+
+df <- df %>% mutate(
+  f_has_1_review_monthly = ifelse(df$n_reviews_per_month == 0, 0,1),
+  f_review_scores_rating = cut(df$n_review_scores_rating, c(0,80,90,99,101), labels = c(0,1,2,3), right = F),
+  f_number_of_reviews    = cut(df$n_number_of_reviews, c(0,1,51,max(df$n_number_of_reviews)), labels = c(0,1,2), right = F),
+  f_sales_365    = cut(df$n_sales_365, c(0,90,180,270,max(df$n_sales_365)+1), labels = c(0,1,2,3), right = F),
+  f_sales_90     = cut(df$n_sales_90, c(0,1,30,60,max(df$n_sales_90)+1), labels = c(0,1,2,3), right = F),
+  f_sales_60     = cut(df$n_sales_60, c(0,1,max(df$n_sales_60)+1), labels = c(0,1), right = F),
+  f_sales_30     = cut(df$n_sales_30, c(0,1,29,max(df$n_sales_30)+1), labels = c(0,1,2), right = F),
+  f_min_nights   = cut(df$n_min_nights, c(0,2,3,max(df$n_min_nights)), labels = c(1,2,3), right = F),
+  f_beds         = cut(df$n_beds, c(0,1,3,max(df$n_beds,na.rm = T)), labels = c(1,3,max(df$n_beds,na.rm = T)), right = F),
+  f_bedrooms     = cut(df$n_bedrooms, c(0,1,2,max(df$n_bedrooms,na.rm = T)), labels = c(1,2,3), right = T),
+  f_bathrooms    = cut(df$n_bathrooms, c(0,1,2,max(df$n_bathrooms, na.rm=T)), labels=c(1,2,3), right = T),
+  f_host_listing = cut(df$n_host_listing, c(0,2,max(df$n_host_listing,na.rm = T)), labels = c(1,2), right = F))
+
+
+# Change Infinite values with NaNs
+for (j in 1:ncol(df) ) data.table::set(df, which(is.infinite(df[[j]])), j, NA)
+
+
+
+# where do we have missing values now?
+to_filter <- sapply(df, function(x) sum(is.na(x)))
+ColswNAs <- data.frame("Rank" = to_filter[to_filter > 0]  ) %>% arrange(desc(Rank))
+
+# 1 NA: l_host_is_superhost, n_host_listings_count,l_host_has_profile_pic,
+#       l_host_identity_verified, f_number_of_reviews, f_min_nights
+# Impute w Reasonable guess: 0, 1,0,0,0,1
+# NA in these cases is most likely 0 -> though at lest 1 night & 1 listing is implied
+
+df <- df %>% mutate(
+  l_host_is_superhost       = ifelse(is.na(l_host_is_superhost),0,l_host_is_superhost), 
+  n_host_listings_count     = ifelse(is.na(n_host_listings_count),1,n_host_listings_count),
+  l_host_has_profile_pic    = ifelse(is.na(l_host_has_profile_pic),0,l_host_has_profile_pic),
+  l_host_identity_verified  = ifelse(is.na(l_host_identity_verified),0,l_host_identity_verified),
+  f_number_of_reviews       = ifelse(is.na(f_number_of_reviews),0,f_number_of_reviews),
+  f_min_nights              = ifelse(is.na(f_min_nights),1,f_min_nights))    
+
+# Most NAs:  p_host_response_rate,f_host_neighbourhood,n_days_since_last_ln,
+#  n_days_since_last, n_days_since_1st_ln, n_days_since_1st
+# p_host_response_rate, f_host_neighbourhood -> DROP
+
+drop <- c("p_host_response_rate", "f_host_neighbourhood")
+df[drop] <- NULL
+
+# days_since -> No Value most likely implies no hosting yet -> 
+#   set to max value & add flag variable -> 1 is enough we showed ealier NAs are from same rows
+#   f_host_listing -> must have at least 1 if in dataset
+df <- df %>% mutate(
+  flag_n_days_since    = ifelse(is.na(n_days_since_last_ln),1,0),
+  n_days_since_last_ln = ifelse(is.na(n_days_since_last_ln),max(n_days_since_last_ln,na.rm = T),n_days_since_last_ln),
+  n_days_since_last    = ifelse(is.na(n_days_since_last),max(n_days_since_last,na.rm = T),n_days_since_last),
+  n_days_since_1st_ln  = ifelse(is.na(n_days_since_1st_ln),max(n_days_since_1st_ln,na.rm = T),n_days_since_1st_ln),  
+  n_days_since_1st     = ifelse(is.na(n_days_since_1st),max(n_days_since_1st,na.rm = T),n_days_since_1st),
+  f_host_listing       = ifelse(is.na(f_host_listing),1,f_host_listing))
+
+# p_host_acceptance_rate -> 100 or NOT
+df <- df %>% mutate(
+  f_host_accepts_all = ifelse(is.na(p_host_acceptance_rate),0,
+                              ifelse(p_host_acceptance_rate == max(p_host_acceptance_rate, na.rm = T),1,0)),
+  n_bedrooms = ifelse(is.na(n_bedrooms), 1, n_bedrooms),
+  n_beds = ifelse(is.na(n_beds), n_accommodates, n_beds), #assume n_beds=n_accomodates,
+  n_bathrooms = ifelse(is.na(n_bathrooms), median(n_bathrooms, na.rm = T), n_bathrooms))  #assume at least 1 bath)  
+
+df <- df %>% mutate(
+  f_beds         = cut(df$n_beds, c(0,1,3,max(df$n_beds,na.rm = T)+1), 
+                       labels = c(1,3,max(df$n_beds,na.rm = T)), right = F),
+  f_bedrooms     = cut(df$n_bedrooms, c(0,1,2,max(df$n_bedrooms,na.rm = T)), labels = c(1,2,3), right = T),
+  f_bathrooms    = cut(df$n_bathrooms, c(0,1.1,2.1,max(df$n_bathrooms, na.rm=T)+1), labels=c(1,2,3), right = F)) %>% 
+  select(-p_host_acceptance_rate)
+
+
+
+#### Save Files ####
+CleanDataPath <- paste0(getwd(),"/Prediction_Projects-CEU_DA3/Bangkok_Airbnb/Data/Clean/")
+# CSV & RDS
+write_csv(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.csv"))
+saveRDS(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.rds"))
