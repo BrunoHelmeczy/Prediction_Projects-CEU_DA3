@@ -517,7 +517,7 @@ DupsRemoved[ManyFalses$Colname] <- NULL
 # 2.10.5) Add back to df for final datatable
 Bangkok <- cbind(Bangkok,DupsRemoved2)
 Bangkok$amenities <- NULL
-
+#### Renaming ####
 
 
 # Start all varnames w l_,d_,n_,flag_,p_,usd_
