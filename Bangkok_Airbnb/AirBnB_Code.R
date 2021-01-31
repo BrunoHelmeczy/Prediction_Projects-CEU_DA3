@@ -669,6 +669,8 @@ df <- df %>% mutate(
   f_bathrooms    = cut(df$n_bathrooms, c(0,1.1,2.1,max(df$n_bathrooms, na.rm=T)+1), labels=c(1,2,3), right = F)) %>% 
   select(-p_host_acceptance_rate)
 
+df <- df %>% select(-c(n_beds,n_bedrooms,n_bathrooms))
+
 
 
 #### Save Files ####
