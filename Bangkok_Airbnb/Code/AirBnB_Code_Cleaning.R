@@ -234,7 +234,6 @@ PropCols <- PropCols[!PropCols %in% "bathrooms_text"]
 # 2.5.4) Beds / Bedrooms / Accommodates -> Accomms 2-6 pax
 Accoms <- Bangkok[VarDescribe[Vars %in% PropCols[1:3],"Vars"]]
 
-summary(Accoms)
 # Nr. Beds & Bedrooms dont seems to be well affected by Nr. Accomms...
 Accoms %>% ggplot(aes(x=accommodates,y=beds)) + 
   geom_point(position = "jitter", width = 0.0, height = 0) 
@@ -269,8 +268,8 @@ CheckVarSimilarity <- function(Keyword, ColnameVector) {
   ColSimilarity <- NULL
   for (i in 1:length(Cols2Check)) {
     for (j in 1:length(Cols2Check)) {
-      ColSimilarity[(i-1)*length(Cols2Check)+j] <- round(sum(Bangkok[Cols2Check][i] == Bangkok[Cols2Check][j], na.rm= T) /nrow(Bangkok),3)
-      
+      ColSimilarity[(i-1)*length(Cols2Check)+j] <- round(
+        sum(Bangkok[Cols2Check][i] == Bangkok[Cols2Check][j], na.rm= T) /nrow(Bangkok),3)
     }
   }
   # They seem quite different, but I definitely do not need info on rooms
@@ -285,13 +284,10 @@ SalesCols <- SalesCols[!SalesCols %in% grep("minimum_nights",SalesCols, value = 
 # Maximum Night Cols -> Max Nights 88.8% identical w Others, rest 99.7% identical w eachother
 # Keep 2 of the 4 -> Max Nights, Max Nights Avg.
 CheckVarSimilarity("maximum_nights",SalesCols)
-
 Bangkok[SalesCols[!SalesCols %in% c("maximum_nights","maximum_nights_avg_ntm")]] <- NULL
-
 Bangkok <- Bangkok %>% rename(n_min_nights = minimum_nights,
                               n_max_nights = maximum_nights,
                               n_max_nights_avg = maximum_nights_avg_ntm)
-
 
 #### 2.7) Availability - Exc. Logicals ####
 # In terms of pricing -> How many days are sold seems more intuitive to be relevant  
@@ -515,7 +511,7 @@ ManyFalses <- Dummies_w_Many_Falses(DupsRemoved)
 DupsRemoved[ManyFalses$Colname] <- NULL
 
 # 2.10.5) Add back to df for final datatable
-Bangkok <- cbind(Bangkok,DupsRemoved2)
+Bangkok <- cbind(Bangkok,DupsRemoved)
 Bangkok$amenities <- NULL
 #### Renaming ####
 
@@ -669,5 +665,5 @@ df <- df %>% mutate(
 #### Save Files ####
 CleanDataPath <- paste0(getwd(),"/Prediction_Projects-CEU_DA3/Bangkok_Airbnb/Data/Clean/")
 # CSV & RDS
-write_csv(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.csv"))
-saveRDS(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.rds"))
+write_csv(df,paste0(CleanDataPath,"airbnb_bangkok_cleaned.csv"))
+saveRDS(df,paste0(CleanDataPath,"airbnb_bangkok_cleaned.rds"))

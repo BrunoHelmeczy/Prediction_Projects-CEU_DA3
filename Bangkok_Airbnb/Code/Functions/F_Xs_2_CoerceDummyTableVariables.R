@@ -75,7 +75,6 @@ CoerceDummyVarColumns <- function(df_w_Dummies,Keywords_Vector, SplitStrings = T
   return(df_w_Dummies)
 }
 
-
 Dummies_w_Many_Falses <- function(DummyVardf, MaxHowManyTrue = 100) {
   
   return(lapply(1:length(DummyVardf), function(x) {

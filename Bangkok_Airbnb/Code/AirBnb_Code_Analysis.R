@@ -13,6 +13,7 @@ library(data.table)
 library(stringr)
 library(dplyr) 
 library(ggthemes)
+library(rpart)
 
 rm(list=ls())
 
@@ -64,14 +65,7 @@ df <- df %>% mutate(
   f_host_accepts_all = factor(f_host_accepts_all)
 )
 
-
-df %>% select(matches(".*host.*")) %>%  colnames()
-
-df %>% select(-matches(".*host.*|.*review.*|^d_|n_days|^usd")) %>% colnames()
-
 #### Variable Grouping ####
-  Target <- 'usd_price' # usd_price_ln -> review transforming back from ln predicted
-
   Prop_vars <- df %>% select(-matches(".*host.*|.*review.*|^d_|n_days|^usd")) %>% colnames()
   Host_vars <- df %>% select(matches(".*host.*")) %>%  colnames()
   Review_vars <- df %>% select(matches(".*review.*|n_days")) %>%  colnames()
@@ -93,9 +87,12 @@ df %>% select(-matches(".*host.*|.*review.*|^d_|n_days|^usd")) %>% colnames()
 
 #### Sample vs Holdout sets ####
 set.seed(1)
-  train_indices <- as.integer(createDataPartition(df$usd_price, p = 0.7, list = FALSE))
+  train_indices <- as.integer(createDataPartition(df$usd_price_ln, p = 0.7, list = FALSE))
   data_train <- df[train_indices, ]
   data_holdout <- df[-train_indices, ]
+  
+  sapply(data_train,class)
+  sapply(df,c)
   
 # train control is 5 fold cross validation
   train_control <- trainControl(method = "cv",
@@ -104,13 +101,12 @@ set.seed(1)
 
 #### OLS ####
 
-# OLS with dummies for area
-# using model B
+colnames(df)
   
  set.seed(1234)
   system.time({
     ols_model <- train(
-      formula(paste0("usd_price ~ ", paste0(predictors3, collapse = " + "))),
+      formula(paste0("usd_price_ln ~ ", paste0(predictors3, collapse = " + "))),
       data = data_train,
       method = "lm",
       trControl = train_control
@@ -126,21 +122,37 @@ ols_model_coeffs_df <- data.frame(
 
 #### CART ####
 
-  
-  
+# CART -> Very large & pruned tree
+
+set.seed(1234)
+system.time({
+  cart_model <- train(
+    formula(paste0("usd_price_ln ~ ", paste0(predictors3, collapse = " + "))),
+    data = data.frame(sapply(data_train,as.numeric)),
+    method = "rpart",
+    trControl = train_control,
+    
+    tuneGrid= expand.grid(cp = 0.0005))
+})
+
+fancyRpartPlot(cart_model$finalModel, sub = "")
+
+# take the last model (large tree) and prunce (cut back)
+#pfit <-prune(cart_model$finalModel, cp=0.005 )
+#summary(pfit)
+
 
 #### LASSO ####
-
 # using extended model w interactions
 
 set.seed(1234)
 system.time({
   lasso_model <- train(
-    formula(paste0("usd_price ~ ", paste0(predictorsE, collapse = " + "))),
+    formula(paste0("usd_price_ln ~ ", paste0(predictorsE, collapse = " + "))),
     data = data_train,
     method = "glmnet",
     preProcess = c("center", "scale"),
-    tuneGrid =  expand.grid("alpha" = 1, "lambda" = seq(0.01, 0.25, by = 0.01)),
+    tuneGrid =  expand.grid("alpha" = 1, "lambda" = seq(0.01, 0.25, by = 0.04)),
     trControl = train_control
   )
 })
@@ -159,19 +171,16 @@ lasso_coeffs_non_null <-as.data.frame(lasso_coeffs[!lasso_coeffs$lasso_coefficie
 lasso_coeffs_non_null <- lasso_coeffs[!lasso_coeffs$lasso_coefficient == 0,]
 
 regression_coeffs <- merge(lasso_coeffs_non_null, ols_model_coeffs_df,  by = "variable", all=TRUE)
-regression_coeffs %>%
-  write.csv(file = paste0(output, "regression_coeffs.csv"))
+#regression_coeffs %>%
+#  write.csv(file = paste0(output, "regression_coeffs.csv"))
 
-  
-  
-  
-  
+
   
 #### Random Forest ####
 
   # set tuning
   tune_grid <- expand.grid(
-    .mtry = c(5, 7, 9),
+    .mtry = c( 5, 7, 9),
     .splitrule = "variance",
     .min.node.size = c(5, 10)
   )
@@ -181,7 +190,7 @@ regression_coeffs %>%
 set.seed(1234)
   system.time({
     rf_model_1 <- train(
-      formula(paste0("price ~", paste0(predictors_1, collapse = " + "))),
+      formula(paste0("usd_price_ln ~ ", paste0(predictors2, collapse = " + "))),
       data = data_train,
       method = "ranger",
       trControl = train_control,
@@ -201,7 +210,7 @@ set.seed(1234)
 set.seed(1234)
   system.time({
     rf_model_2 <- train(
-      formula(paste0("price ~", paste0(predictors_2, collapse = " + "))),
+      formula(paste0("usd_price_ln", paste0(" ~ ",paste0(predictors3, collapse = " + ")))),
       data = data_train,
       method = "ranger",
       trControl = train_control,
@@ -211,21 +220,232 @@ set.seed(1234)
   })
   
 rf_model_2
+
+set.seed(1234)
+system.time({
+  rf_model_2_lev <- train(
+    formula(paste0("usd_price", paste0(" ~ ",paste0(predictors3, collapse = " + ")))),
+    data = data_train,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity"
+  )
+})
+
+rf_model_2_lev
   
 # Turning parameter choice 1
   result_1 <- matrix(c(
     rf_model_1$finalModel$mtry,
     rf_model_2$finalModel$mtry,
     rf_model_1$finalModel$min.node.size,
-    rf_model_2$finalModel$min.node.size,
+    rf_model_2$finalModel$min.node.size
   ),
-  nrow=3, ncol=2,
-  dimnames = list(c("Model A", "Model B","Model B auto"),
+  nrow=2, ncol=2,
+  dimnames = list(c("Model A", "Model B"),
                   c("Min vars","Min nodes"))
   )  
   
-  
-  
-    
-#### GBM ####
 
+# evaluate random forests -------------------------------------------------
+  
+  results <- resamples(
+    list(
+      model_1  = rf_model_1,
+      model_2  = rf_model_2
+    )
+  )
+  summary(results)
+  
+  
+    results$values$`model_1~RMSE`
+  # Turning parameter choice 2
+  result_2 <- matrix(c(mean(results$values$`model_1~RMSE`),
+                       mean(results$values$`model_2~RMSE`)
+  ),
+  nrow=2, ncol=1,
+  dimnames = list(c("Model A", "Model B"),
+                  c(results$metrics[2]))
+  )
+
+  
+#------------------ Model Comparison ####
+  final_models <-
+    list("OLS" = ols_model,
+         "LASSO (w/ interactions)" = lasso_model,
+#         "CART" = cart_model,
+         "Random forest (smaller model)" = rf_model_1,
+         "Random forest" = rf_model_2
+#         "Random forest - Level Y var" = rf_model_2_lev
+)
+  
+  results <- resamples(final_models) %>% summary()
+  results # throw out CART
+  
+models <- c("ols_model","lasso_model","rf_model_1","rf_model_2")  
+
+
+Predictions <-data.frame(sapply(models[1:4],function(x) {
+  tl <- list()
+  model <- eval(parse(text = x))
+  tl[[x]] <- predict(model,newdata = data_train)
+  res <- tl[[x]] - data_train$usd_price_ln
+  StDev <- sd(res)
+  tl[[x]] <- exp(tl[[x]]) * exp((StDev^2)/2)
+  
+  return(tl)
+}))
+
+#results[[3]][['Rsquared']][c(3,6),] <- NULL
+#i <- 1
+Rsq <- NULL
+for (i in 1:4) {
+  Rsq[models[i]] <- mean(results[[3]][['Rsquared']][i,1:5])
+}
+
+SumStatTable <- cbind(models,Rsq,rbindlist(lapply(Predictions, function(x) {
+  tl <- list()
+  tl[['MAE']] <- round(MAE(x,data_train$usd_price),3)
+  tl[['RMSE']] <- round(RMSE(x, data_train$usd_price),3)
+  tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_train$usd_price),3)
+  return(tl)
+})))
+
+
+
+data_holdout_w_prediction <- data_holdout %>%
+  mutate(predicted_price = predict(rf_model_2, newdata = data_holdout))
+
+# MODEL DIAGNOSTICS -------------------------------------------------------
+#
+#########################################################################################
+  
+  
+#########################################################################################
+# Variable Importance Plots -------------------------------------------------------
+#########################################################################################
+# first need a function to calculate grouped varimp
+group.importance <- function(rf.obj, groups) {
+    var.imp <- as.matrix(sapply(groups, function(g) {
+      sum(importance(rf.obj)[g], na.rm = TRUE)
+    }))
+    colnames(var.imp) <- "MeanDecreaseGini"
+    return(var.imp)
+}
+
+  
+  # variable importance plot
+  # 1) full varimp plot, full
+  # 2) varimp plot grouped
+  # 3) varimp plot , top 10
+  # 4) varimp plot  w copy, top 10
+  
+  
+  rf_model_2_var_imp <- importance(rf_model_2$finalModel)/1000
+  rf_model_2_var_imp_df <-
+    data.frame(varname = names(rf_model_2_var_imp),imp = rf_model_2_var_imp) %>%
+    arrange(desc(imp)) %>%
+    mutate(imp_percentage = imp/sum(imp))
+  
+  
+  ##############################
+  # 1) full varimp plot, above a cutoff
+  ##############################
+  
+  
+  cutoff = 400
+  rf_model_2_var_imp_plot <- ggplot(rf_model_2_var_imp_df[rf_model_2_var_imp_df$imp>cutoff,],
+                                    aes(x=reorder(varname, imp), y=imp_percentage)) +
+    geom_point(color="blue", size=1.5) +
+    geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=1) +
+    ylab("Importance (Percent)") +
+    xlab("Variable Name") +
+    coord_flip() +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    theme_tufte() +
+    theme(axis.text.x = element_text(size=6), axis.text.y = element_text(size=6),
+          axis.title.x = element_text(size=6), axis.title.y = element_text(size=6))
+  rf_model_2_var_imp_plot
+  
+  ##############################
+  # 2) varimp plot grouped
+  ##############################
+  # grouped variable importance - keep binaries created off factors together
+  
+  varnames <- rf_model_2$finalModel$xNames
+  f_neighbourhood_cleansed_varnames <- grep("f_neighbourhood_cleansed",varnames, value = TRUE)
+  f_property_type_varnames <- grep("f_property_type",varnames, value = TRUE)
+  n_accommodates_varnames <- grep("n_accommodates",varnames,value = T)
+  amenities_varnames <- grep("^d_",varnames,value = T)
+  n_days_since_varnames <- grep("n_days",varnames,value = T)
+  host_varnames <- grep("host",varnames,value = T)
+  f_sales_varnames <- grep("sales|^l_has|l_ins",varnames,value = T)
+  f_beds <- grep("beds",varnames,value = T)
+  f_bedrooms <- grep("bedrooms",varnames,value = T)
+  f_bathrooms <- grep("bathrooms",varnames,value = T)
+  n_reviews <- grep("review",varnames,value = T)
+  min_nights <- grep("nights",varnames,value = T)
+  
+  groups <- list(
+    Neighbourhood       = f_neighbourhood_cleansed_varnames,
+    Property_type       = f_property_type_varnames,
+    n_accommodates      = n_accommodates_varnames,
+    amenities           = amenities_varnames,
+    Sales_Availability  = f_sales_varnames,
+    Nr_Beds             = f_beds,
+    Bedrooms            = f_bedrooms,
+    Host_Exp_n_Recent   = n_days_since_varnames,
+    Host_information    = host_varnames,
+    Nr_Bathrooms        = f_bathrooms,
+    Review_Scores       = n_reviews,
+    Stay_Restrictions   = min_nights)
+    
+  rf_model_2_var_imp_grouped <- group.importance(rf_model_2$finalModel, groups)
+  rf_model_2_var_imp_grouped_df <- data.frame(varname = rownames(rf_model_2_var_imp_grouped),
+                                              imp = rf_model_2_var_imp_grouped[,1])  %>%
+    mutate(imp_percentage = imp/sum(imp))
+  
+  rf_model_2_var_imp_grouped_plot <-
+    ggplot(rf_model_2_var_imp_grouped_df, aes(x=reorder(varname, imp), y=imp_percentage)) +
+    geom_point(color="blue", size=1) +
+    geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=0.7) +
+    ylab("Importance (Percent)") +   xlab("Variable Name") +
+    coord_flip() +
+    # expand=c(0,0),
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    theme_tufte() +
+    theme(axis.text.x = element_text(size=6), 
+          axis.text.y = element_text(size=8),
+          axis.title.x = element_text(size=8), axis.title.y = element_text(size=4))
+  rf_model_2_var_imp_grouped_plot
+  
+##########################################
+  # 3) full varimp plot, top 25 amenities
+##########################################
+  
+  
+  OnlyAmens <-  rf_model_2_var_imp_df[rf_model_2_var_imp_df$varname %in% 
+                                        grep("^d_",rf_model_2_var_imp_df$varname, value = T),]
+  
+  # have a version with top 10 vars only -> only Amenities
+  rf_model_2_var_imp_plot_b <- ggplot(OnlyAmens[1:25,], aes(x=reorder(varname, imp), y=imp_percentage)) +
+    geom_point(color="blue", size=1) +
+    geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=0.75) +
+    labs(y = "Importance (Percent)", x = "Variable Name",
+         title = "Amenities' Importance for Price prediction") +
+    coord_flip() +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    theme_tufte() +
+    theme(axis.text.x = element_text(size=6), axis.text.y = element_text(size=6),
+          axis.title.x = element_text(size=6), axis.title.y = element_text(size=4),
+          title = element_text(size = 10))
+  rf_model_2_var_imp_plot_b
+  
+
+
+  
+  
+  data_holdout_w_prediction <- data_holdout %>%
+    mutate(predicted_price = predict(rf_model_2, newdata = data_holdout))
+    
