@@ -1,0 +1,69 @@
+---
+title: "Airbnb Price prediction in Bangkok"
+author: "Bruno Helmeczy"
+date: "31/01/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(stargazer)
+library(Hmisc)
+library(readr)
+library(rattle)
+library(tidyverse)
+library(caret)
+library(ranger)
+library(Hmisc)
+library(knitr)
+library(kableExtra)
+library(xtable)
+library(data.table)
+library(stringr)
+library(dplyr) 
+library(gridExtra)
+library(ggthemes)
+
+BangkokClean <- read.csv("https://raw.githubusercontent.com/BrunoHelmeczy/Prediction_Projects-CEU_DA3/main/Bangkok_Airbnb/Data/Clean/airbnb_bangkok_cleaned.csv",
+                         stringsAsFactors = T)
+df <- BangkokClean
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r,  message = F,warning = F, echo = FALSE,results = "asis", fig.height=4,fig.width=3.5}
+
+#sapply(df %>% colnames(),function(x) {
+#  hist(df[x])
+#})
+
+
+
+#hists
+#grid.arrange(hists,ncol = 2)
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r ,  message = F,warning = F, echo = FALSE,results = "asis", fig.height=2.5,fig.width=3.5}
+allplots <- for(i in df %>% colnames()){
+  plt <- ggplot(df, aes_string(x=i)) +
+    geom_bar() + 
+    theme_tufte() + 
+    labs(title = paste0("Frequency Distribution of ",i) )
+  print(plt)
+#  Sys.sleep(0.1)
+}
+
+allplots
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

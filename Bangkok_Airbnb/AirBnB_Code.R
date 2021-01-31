@@ -176,8 +176,12 @@ summary(Bangkok[ListingCols])
         # definitely non-linear
         # units so small, & not measuring relevant distance fr. somewhere
   
-    # keep only Neighboorhood Cleansed -> as factor
-  
+    # keep only Neighboorhood Cleansed -> as factor -> outside top5 4% of data/value
+      # coerce to top5 + other
+#Bangkok <- Bangkok %>% mutate(
+#  neighbourhood_cleansed = ifelse(neighbourhood_cleansed %in%
+#                                    c("Khlong Toei","Vadhana","Huai Khwang","Ratchatkewi","Sathon"),
+#                                  neighbourhood_cleansed,"Other"))
 Bangkok <- Bangkok %>% mutate(f_neighbourhood_cleansed = factor(neighbourhood_cleansed))
 Bangkok[Geo_Cols] <- NULL
 
@@ -593,17 +597,21 @@ df <- df %>% select(-c(n_max_nights,n_max_nights_avg))
 
 df <- df %>% mutate(
   f_has_1_review_monthly = ifelse(df$n_reviews_per_month == 0, 0,1),
-  f_review_scores_rating = cut(df$n_review_scores_rating, c(0,80,90,99,101), labels = c(0,1,2,3), right = F),
-  f_number_of_reviews    = cut(df$n_number_of_reviews, c(0,1,51,max(df$n_number_of_reviews)), labels = c(0,1,2), right = F),
-  f_sales_365    = cut(df$n_sales_365, c(0,90,180,270,max(df$n_sales_365)+1), labels = c(0,1,2,3), right = F),
-  f_sales_90     = cut(df$n_sales_90, c(0,1,30,60,max(df$n_sales_90)+1), labels = c(0,1,2,3), right = F),
+  f_review_scores_rating = cut(df$n_review_scores_rating, c(0,80,90,99,101), labels = c(70,80,90,100), right = F),
+  f_number_of_reviews    = cut(df$n_number_of_reviews, c(0,1,51,max(df$n_number_of_reviews)), labels = c(0,50,100), right = F),
+  f_sales_365    = cut(df$n_sales_365, c(0,90,180,270,max(df$n_sales_365)+1), labels = c(0,90,180,365), right = F),
+  f_sales_90     = cut(df$n_sales_90, c(0,1,30,60,max(df$n_sales_90)+1), labels = c(0,1,30,60), right = F),
   f_sales_60     = cut(df$n_sales_60, c(0,1,max(df$n_sales_60)+1), labels = c(0,1), right = F),
-  f_sales_30     = cut(df$n_sales_30, c(0,1,29,max(df$n_sales_30)+1), labels = c(0,1,2), right = F),
+  f_sales_30     = cut(df$n_sales_30, c(0,1,29,max(df$n_sales_30)+1), labels = c(0,1,30), right = F),
   f_min_nights   = cut(df$n_min_nights, c(0,2,3,max(df$n_min_nights)), labels = c(1,2,3), right = F),
   f_beds         = cut(df$n_beds, c(0,1,3,max(df$n_beds,na.rm = T)), labels = c(1,3,max(df$n_beds,na.rm = T)), right = F),
   f_bedrooms     = cut(df$n_bedrooms, c(0,1,2,max(df$n_bedrooms,na.rm = T)), labels = c(1,2,3), right = T),
   f_bathrooms    = cut(df$n_bathrooms, c(0,1,2,max(df$n_bathrooms, na.rm=T)), labels=c(1,2,3), right = T),
   f_host_listing = cut(df$n_host_listing, c(0,2,max(df$n_host_listing,na.rm = T)), labels = c(1,2), right = F))
+
+# Remove n version
+df <- df %>% select( - c(n_reviews_per_month,n_review_scores_rating,n_number_of_reviews,
+                   n_sales_365,n_sales_90,n_sales_60,n_sales_30,n_min_nights))
 
 
 # Change Infinite values with NaNs
