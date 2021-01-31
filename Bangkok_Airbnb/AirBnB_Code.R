@@ -124,8 +124,8 @@ hostcities2keep <- Dummies_w_Many_Falses(DummyTable,10000)
 top3hostcities <- unlist(hostcities2keep[(nrow(hostcities2keep)-2):(nrow(hostcities2keep)),"Colname"])
 
 Bangkok$host_neighbourhood <- ifelse(Bangkok$f_host_neighbourhood %in% top3hostcities ,"Other", top3hostcities)
-table(Bangkok$f_host_neighbourhood)
 Bangkok <- Bangkok %>% rename(f_host_neighbourhood = host_neighbourhood)
+table(Bangkok$f_host_neighbourhood)
 
 rm(DummyTable,hostcities2keep)
 
@@ -515,7 +515,7 @@ ManyFalses <- Dummies_w_Many_Falses(DupsRemoved)
 DupsRemoved[ManyFalses$Colname] <- NULL
 
   # 2.10.5) Add back to df for final datatable
-Bangkok <- cbind(Bangkok,DupsRemoved2)
+Bangkok <- cbind(Bangkok,DupsRemoved)
 Bangkok$amenities <- NULL
 
 
@@ -523,10 +523,7 @@ Bangkok$amenities <- NULL
 # Start all varnames w l_,d_,n_,flag_,p_,usd_
 oldnames <- Bangkok %>% select(-matches("^l_.*|^d_.*|^n_.*|^flag_.*|^f_.*|^p_.*|^usd_.*")) %>% colnames()
 torename <- match(oldnames,colnames(Bangkok))
-
 colnames(Bangkok)[torename] <- paste0("d_",oldnames)
-
-
 
 #### Save Files ####
 CleanDataPath <- paste0(getwd(),"/Prediction_Projects-CEU_DA3/Bangkok_Airbnb/Data/Clean/")
@@ -669,5 +666,5 @@ df <- df %>% mutate(
 #### Save Files ####
 CleanDataPath <- paste0(getwd(),"/Prediction_Projects-CEU_DA3/Bangkok_Airbnb/Data/Clean/")
 # CSV & RDS
-write_csv(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.csv"))
-saveRDS(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.rds"))
+write_csv(df,paste0(CleanDataPath,"airbnb_bangkok_cleaned.csv"))
+saveRDS(df,paste0(CleanDataPath,"airbnb_bangkok_cleaned.rds"))
