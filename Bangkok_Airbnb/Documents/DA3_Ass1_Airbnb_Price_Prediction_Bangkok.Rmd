@@ -1,5 +1,5 @@
 ---
-title: "Airbnb Price prediction in Bangkok"
+title: "Price prediction for Airbnb Listings in Bangkok"
 author: "Bruno Helmeczy"
 date: "31/01/2021"
 output: pdf_document
@@ -28,7 +28,17 @@ BangkokClean <- read.csv("https://raw.githubusercontent.com/BrunoHelmeczy/Predic
 df <- BangkokClean
 ```
 
-## R Markdown
+## Abstract
+
+This report investigates the prices at which apartments in Bangkok can be rented out on Airbnb. Below I discuss a number of features taken into account, compare 6 prediction models of varying complexity, & after choosing & re-estimating my final model, I  investigate expected performance across property types, the number of people accommodated, while investigating most important accommodation features. Based on 5-fold cross validation, I found the expanded Random Forest model predicting log-transformed prices to perform best in terms of all metrics. After re-estimation, the final model boasted 54.1% R-squared, & performed with 21 dollar MAE & 51.9 dollar RMSE, ca. 95% of the average price during out-of-sample testing. Finally, model diagnostics showed the model to perform fairly consistently given accommodation size (2-6 people) & property type (apartment or condominium), yet RMSE decreased by ca. 40%, to 28 dollar RMSE, when considering the most frequent neighborhood in the dataset: Khlong Toei.  
+
+### Data, Cleaning & Feature Engineering
+
+The raw dataset was downloaded from- & is available at AirBnB-s website, from [here](http://data.insideairbnb.com/thailand/central-thailand/bangkok/2020-12-23/data/listings.csv.gz), & comprises over 19.7K observations & 74 Variables, summarizing all accommodations in the Bangkok area available for rental, as of 23rd-24th December, 2020. 
+
+After keeping only apartments-, & condominiums hosting between 2-6 people, 9962 observations remained to clean for analysis. To manage this feature space, i.e. to keep what's important & drop what is not, while looking to maintain & intuition throughout the process, I grouped variables in 7 subjects (excluding ID variables): **Host** information, **Geo-Spatial**-, & **Property** information, **Sales**-, & **Availability**-related data, & **Reviews**-, & **Listings** data. 
+
+
 
 This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 

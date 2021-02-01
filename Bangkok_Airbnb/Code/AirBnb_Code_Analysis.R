@@ -21,8 +21,6 @@ BangkokClean <- read.csv("https://raw.githubusercontent.com/BrunoHelmeczy/Predic
                          stringsAsFactors = T)
 df <- BangkokClean
 
-data.frame("Nr.Col"=sapply(df,class))
-
 #### 1) Plot var distributions en-mass ####
     # Colnames selection:  df %>% select(-matches("^d_|^l_")
     # Dummies -> seperate "Race"-style plot - as for DA2-Ass2
@@ -91,8 +89,7 @@ set.seed(1)
   data_train <- df[train_indices, ]
   data_holdout <- df[-train_indices, ]
   
-  sapply(data_train,class)
-  sapply(df,c)
+#  sapply(data_train,class) == sapply(df,class)
   
 # train control is 5 fold cross validation
   train_control <- trainControl(method = "cv",
@@ -235,17 +232,21 @@ system.time({
 
 rf_model_2_lev
   
-# Turning parameter choice 1
+
+
+  # Tuning parameter choice 1
   result_1 <- matrix(c(
     rf_model_1$finalModel$mtry,
     rf_model_2$finalModel$mtry,
+    rf_model_2_lev$finalModel$mtry,
     rf_model_1$finalModel$min.node.size,
-    rf_model_2$finalModel$min.node.size
+    rf_model_2$finalModel$min.node.size,
+    rf_model_2_lev$finalModel$min.node.size
+    
   ),
-  nrow=2, ncol=2,
-  dimnames = list(c("Model A", "Model B"),
-                  c("Min vars","Min nodes"))
-  )  
+  nrow=3, ncol=2,
+  dimnames = list(c("Model 1", "Model 2","Model 2 level"),
+                  c("Min vars","Min nodes")))
   
 
 # evaluate random forests -------------------------------------------------
@@ -253,12 +254,13 @@ rf_model_2_lev
   results <- resamples(
     list(
       model_1  = rf_model_1,
-      model_2  = rf_model_2
+      model_2  = rf_model_2,
+      model_2_lev  = rf_model_2_lev
     )
   )
   summary(results)
   
-  
+#  results$values$
     results$values$`model_1~RMSE`
   # Turning parameter choice 2
   result_2 <- matrix(c(mean(results$values$`model_1~RMSE`),
@@ -274,18 +276,26 @@ rf_model_2_lev
   final_models <-
     list("OLS" = ols_model,
          "LASSO (w/ interactions)" = lasso_model,
-#         "CART" = cart_model,
+         "CART" = cart_model,
          "Random forest (smaller model)" = rf_model_1,
          "Random forest" = rf_model_2
-#         "Random forest - Level Y var" = rf_model_2_lev
+         ,"Random forest - Level Y var" = rf_model_2_lev
 )
   
   results <- resamples(final_models) %>% summary()
-  results # throw out CART
+  results # throw out CART & Level RF
   
+  final_models <-
+    list("OLS" = ols_model,
+         "LASSO (w/ interactions)" = lasso_model,
+#         "CART" = cart_model,
+         "Random forest (smaller model)" = rf_model_1,
+         "Random forest" = rf_model_2
+#         ,"Random forest - Level Y var" = rf_model_2_lev
+    )
+  
+  results <- resamples(final_models) %>% summary()
 models <- c("ols_model","lasso_model","rf_model_1","rf_model_2")  
-
-
 Predictions <-data.frame(sapply(models[1:4],function(x) {
   tl <- list()
   model <- eval(parse(text = x))
@@ -297,8 +307,6 @@ Predictions <-data.frame(sapply(models[1:4],function(x) {
   return(tl)
 }))
 
-#results[[3]][['Rsquared']][c(3,6),] <- NULL
-#i <- 1
 Rsq <- NULL
 for (i in 1:4) {
   Rsq[models[i]] <- mean(results[[3]][['Rsquared']][i,1:5])
@@ -312,16 +320,201 @@ SumStatTable <- cbind(models,Rsq,rbindlist(lapply(Predictions, function(x) {
   return(tl)
 })))
 
+SumStatTable
+
+#### Final Model Re-Estimation ####
+
+train_control <- trainControl(method = "none",verboseIter = FALSE)  
+
+# set tuning for final model
+tune_grid <- expand.grid(
+  .mtry = c(12),
+  .splitrule = "variance",
+  .min.node.size = c(5)
+)
+
+set.seed(1234)
+system.time({
+  rf_model_final <- train(
+    formula(paste0("usd_price_ln", paste0(" ~ ",paste0(predictors3, collapse = " + ")))),
+    data = data_train,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity"
+  )
+})
+
+rf_model_final$finalModel$r.squared
+
+# simpler model for model A (1)
+# set tuning for final model
+tune_grid <- expand.grid(
+  .mtry = c(9),
+  .splitrule = "variance",
+  .min.node.size = c(5)
+)
+
+set.seed(1234)
+system.time({
+  rf_model_1final <- train(
+    formula(paste0("usd_price_ln ~ ", paste0(predictors2, collapse = " + "))),
+    data = data_train,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity"
+  )
+})
 
 
+
+#### Summary of RF_1_Final Model ####
 data_holdout_w_prediction <- data_holdout %>%
-  mutate(predicted_price = predict(rf_model_2, newdata = data_holdout))
+  mutate(predicted_price_ln = predict(rf_model_1final, newdata = data_holdout))
+
+data_holdout_w_prediction <- data_holdout_w_prediction %>% mutate(res = predicted_price_ln - usd_price_ln)
+StDev <- sd(data_holdout_w_prediction$res)
+data_holdout_w_prediction$predicted_price <- exp(data_holdout_w_prediction$predicted_price_ln) * exp((StDev^2)/2)
+
+
+Rsq <- rf_model_1final$finalModel$r.squared
+
+SumStatsFinalModelTable1 <- cbind(Rsq,rbindlist(lapply(data_holdout_w_prediction[c("predicted_price")], function(x) {
+  tl <- list()
+  tl[['MAE']] <- round(MAE(x,data_holdout$usd_price),3)
+  tl[['RMSE']] <- round(RMSE(x, data_holdout$usd_price),3)
+  tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_holdout$usd_price),3)
+  return(tl)
+})))
+
+
+
+#### Summary of RF_2_Final Model ####
+data_holdout_w_prediction <- data_holdout %>%
+  mutate(predicted_price_ln = predict(rf_model_final, newdata = data_holdout))
+
+data_holdout_w_prediction <- data_holdout_w_prediction %>% mutate(res = predicted_price_ln - usd_price_ln)
+StDev <- sd(data_holdout_w_prediction$res)
+data_holdout_w_prediction$predicted_price <- exp(data_holdout_w_prediction$predicted_price_ln) * exp((StDev^2)/2)
+
+
+Rsq <- rf_model_final$finalModel$r.squared
+
+SumStatsFinalModelTable <- cbind(Rsq,rbindlist(lapply(data_holdout_w_prediction[c("predicted_price")], function(x) {
+  tl <- list()
+  tl[['MAE']] <- round(MAE(x,data_holdout$usd_price),3)
+  tl[['RMSE']] <- round(RMSE(x, data_holdout$usd_price),3)
+  tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_holdout$usd_price),3)
+  return(tl)
+})))
+
+rbind(SumStatsFinalModelTable1,SumStatsFinalModelTable)
+
 
 # MODEL DIAGNOSTICS -------------------------------------------------------
 #
 #########################################################################################
   
-  
+# Pred vs Actual Y Line + Scatter
+PredvsAccPlot <- data_holdout_w_prediction %>% ggplot(aes(x = usd_price, y = usd_price)) +
+  geom_point(aes(y = predicted_price)) + 
+  geom_line() +
+  theme_tufte() +
+  labs(title = "Actual versus Predicted Prices",
+       x = "Actual Prices", y = "Predicted Prices")
+
+
+######### create nice summary table of heterogeneity
+a <- data_holdout_w_prediction %>%
+#  mutate(is_low_size = ifelse(n_accommodates <= 3, "small apt", "large apt")) %>%
+  group_by(n_accommodates) %>%
+  dplyr::summarise(
+    rmse = round(RMSE(predicted_price, usd_price),2),
+    mean_price = round(mean(usd_price),2),
+    rmse_norm = round(RMSE(predicted_price, usd_price) / mean(usd_price),2))
+
+b <- data_holdout_w_prediction %>%
+  filter(f_neighbourhood_cleansed %in% c("Khlong Toei", "Vadhana", "Huai Khwang", "Ratchathewi", "Sathon")) %>%
+  group_by(f_neighbourhood_cleansed) %>%
+  dplyr::summarise( count = n(),
+    rmse = round(RMSE(predicted_price, usd_price),2),
+    mean_price = round(mean(usd_price),2),
+    rmse_norm = round(RMSE(predicted_price, usd_price) / mean(usd_price),2)) %>% 
+  arrange(desc(count)) %>% select(-count)
+
+c <- data_holdout_w_prediction %>%
+  filter(f_property_type %in% c("apartment","condominium")) %>% 
+  group_by(f_property_type) %>%
+  dplyr::summarise(
+    rmse = round(RMSE(predicted_price, usd_price),2),
+    mean_price = round(mean(usd_price),2),
+    rmse_norm = round(RMSE(predicted_price, usd_price) / mean(usd_price),2))
+
+
+d <- data_holdout_w_prediction %>%
+  dplyr::summarise(
+    rmse = round(RMSE(predicted_price, usd_price),2),
+    mean_price = round(mean(usd_price),2),
+    rmse_norm = round(RMSE(predicted_price, usd_price) / mean(usd_price),2)  )
+
+# Save output
+colnames(a) <- c("", "RMSE", "Mean price", "RMSE/price")
+colnames(b) <- c("", "RMSE", "Mean price", "RMSE/price")
+colnames(c) <- c("", "RMSE", "Mean price", "RMSE/price")
+d<- cbind("All", d)
+colnames(d) <- c("", "RMSE", "Mean price", "RMSE/price")
+
+line1 <- c("Type", " ", " ", " ")
+line2 <- c("Apartment size", " ", " ", " ")
+line3 <- c("Neighbourhood", " ", " ", " ")
+
+result_3 <- rbind(line2, a, line1, c, line3, b, d) %>%
+  transform(RMSE = as.numeric(RMSE), `Mean price` = as.numeric(`Mean price`),
+            `RMSE/price` = as.numeric(`RMSE/price`))
+
+table(data_holdout$f_neighbourhood_cleansed)
+
+
+# FIGURES FOR FITTED VS ACTUAL OUTCOME VARIABLES #
+###################################################
+
+# Target variable
+Ylev <- data_holdout_w_prediction[["predicted_price"]]
+meanY <-mean(Ylev)
+sdY <- sd(Ylev)
+
+# Predicted values
+predictionlev_holdout_pred <- data_holdout_w_prediction %>% select(predicted_price) %>%  #%>%
+  mutate(pred_lwr = predicted_price - sdY, 
+         pred_upr = predicted_price + sdY)
+
+
+predictionlev_holdout <- cbind(data_holdout[,c("usd_price","n_accommodates")],
+                               predictionlev_holdout_pred) %>% 
+  mutate(fit = abs(predicted_price - usd_price))
+
+predictionlev_holdout_summary <-
+  predictionlev_holdout %>% 
+  group_by(n_accommodates) %>%
+  dplyr::summarise(
+    fit = mean(predicted_price, na.rm = T),
+    #    res = mean(fit, na.rm=TRUE),
+    pred_lwr = mean(pred_lwr, na.rm=TRUE),
+    pred_upr = mean(pred_upr, na.rm=TRUE))
+
+F14_CI_n_accomodate <- ggplot(predictionlev_holdout_summary, aes(x=factor(n_accommodates))) +
+  geom_bar(aes(y = fit ), stat="identity",  fill = "blue", alpha=0.7 ) +
+  geom_errorbar(aes(ymin=pred_lwr, ymax=pred_upr, color = "Pred. interval"),width=.2) +
+  #geom_errorbar(aes(ymin=conf_lwr, ymax=conf_upr, color = "Conf. interval"),width=.2) +
+  scale_y_continuous(name = "Predicted price (US dollars)") +
+  scale_x_discrete(name = "Accomodates (Persons)") +
+  scale_color_manual(values=c("green", "green")) +
+  theme_tufte() +
+  theme(legend.title= element_blank(),legend.position="none")
+F14_CI_n_accomodate
+
+
 #########################################################################################
 # Variable Importance Plots -------------------------------------------------------
 #########################################################################################
@@ -341,10 +534,11 @@ group.importance <- function(rf.obj, groups) {
   # 3) varimp plot , top 10
   # 4) varimp plot  w copy, top 10
   
-  
-  rf_model_2_var_imp <- importance(rf_model_2$finalModel)/1000
-  rf_model_2_var_imp_df <-
-    data.frame(varname = names(rf_model_2_var_imp),imp = rf_model_2_var_imp) %>%
+rf_model_final$finalModel  
+
+  rf_model_final_var_imp <- importance(rf_model_final$finalModel)/1000
+  rf_model_final_var_imp_df <-
+    data.frame(varname = names(rf_model_final_var_imp),imp = rf_model_final_var_imp) %>%
     arrange(desc(imp)) %>%
     mutate(imp_percentage = imp/sum(imp))
   
@@ -354,8 +548,8 @@ group.importance <- function(rf.obj, groups) {
   ##############################
   
   
-  cutoff = 400
-  rf_model_2_var_imp_plot <- ggplot(rf_model_2_var_imp_df[rf_model_2_var_imp_df$imp>cutoff,],
+  cutoff = 0.05
+  rf_model_final_var_imp_plot <- ggplot(rf_model_final_var_imp_df[rf_model_final_var_imp_df$imp>cutoff,],
                                     aes(x=reorder(varname, imp), y=imp_percentage)) +
     geom_point(color="blue", size=1.5) +
     geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=1) +
@@ -366,7 +560,7 @@ group.importance <- function(rf.obj, groups) {
     theme_tufte() +
     theme(axis.text.x = element_text(size=6), axis.text.y = element_text(size=6),
           axis.title.x = element_text(size=6), axis.title.y = element_text(size=6))
-  rf_model_2_var_imp_plot
+  rf_model_final_var_imp_plot
   
   ##############################
   # 2) varimp plot grouped
@@ -401,13 +595,13 @@ group.importance <- function(rf.obj, groups) {
     Review_Scores       = n_reviews,
     Stay_Restrictions   = min_nights)
     
-  rf_model_2_var_imp_grouped <- group.importance(rf_model_2$finalModel, groups)
-  rf_model_2_var_imp_grouped_df <- data.frame(varname = rownames(rf_model_2_var_imp_grouped),
-                                              imp = rf_model_2_var_imp_grouped[,1])  %>%
+  rf_model_final_var_imp_grouped <- group.importance(rf_model_final$finalModel, groups)
+  rf_model_final_var_imp_grouped_df <- data.frame(varname = rownames(rf_model_final_var_imp_grouped),
+                                              imp = rf_model_final_var_imp_grouped[,1])  %>%
     mutate(imp_percentage = imp/sum(imp))
   
-  rf_model_2_var_imp_grouped_plot <-
-    ggplot(rf_model_2_var_imp_grouped_df, aes(x=reorder(varname, imp), y=imp_percentage)) +
+  rf_model_final_var_imp_grouped_plot <-
+    ggplot(rf_model_final_var_imp_grouped_df, aes(x=reorder(varname, imp), y=imp_percentage)) +
     geom_point(color="blue", size=1) +
     geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=0.7) +
     ylab("Importance (Percent)") +   xlab("Variable Name") +
@@ -418,18 +612,18 @@ group.importance <- function(rf.obj, groups) {
     theme(axis.text.x = element_text(size=6), 
           axis.text.y = element_text(size=8),
           axis.title.x = element_text(size=8), axis.title.y = element_text(size=4))
-  rf_model_2_var_imp_grouped_plot
+  rf_model_final_var_imp_grouped_plot
   
 ##########################################
   # 3) full varimp plot, top 25 amenities
 ##########################################
   
   
-  OnlyAmens <-  rf_model_2_var_imp_df[rf_model_2_var_imp_df$varname %in% 
-                                        grep("^d_",rf_model_2_var_imp_df$varname, value = T),]
+  OnlyAmens <-  rf_model_final_var_imp_df[rf_model_final_var_imp_df$varname %in% 
+                                        grep("^d_",rf_model_final_var_imp_df$varname, value = T),]
   
   # have a version with top 10 vars only -> only Amenities
-  rf_model_2_var_imp_plot_b <- ggplot(OnlyAmens[1:25,], aes(x=reorder(varname, imp), y=imp_percentage)) +
+  rf_model_final_var_imp_plot_b <- ggplot(OnlyAmens[1:20,], aes(x=reorder(varname, imp), y=imp_percentage)) +
     geom_point(color="blue", size=1) +
     geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=0.75) +
     labs(y = "Importance (Percent)", x = "Variable Name",
@@ -440,12 +634,5 @@ group.importance <- function(rf.obj, groups) {
     theme(axis.text.x = element_text(size=6), axis.text.y = element_text(size=6),
           axis.title.x = element_text(size=6), axis.title.y = element_text(size=4),
           title = element_text(size = 10))
-  rf_model_2_var_imp_plot_b
+  rf_model_final_var_imp_plot_b
   
-
-
-  
-  
-  data_holdout_w_prediction <- data_holdout %>%
-    mutate(predicted_price = predict(rf_model_2, newdata = data_holdout))
-    
