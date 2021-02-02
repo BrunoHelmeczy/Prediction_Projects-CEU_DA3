@@ -56,11 +56,9 @@ allplots <- for(i in df %>% colnames()){
 
 ## Abstract
 
-This report investigates how to predict the prices at which apartments in Bangkok can be rented out on Airbnb. Below I discuss a number of features taken into account, compare 6 prediction models of varying complexity, & after choosing & re-estimating my final model, I  investigate expected performance across property types, the number of people accommodated, while investigating most important accommodation features. Based on 5-fold cross validation, I found the expanded Random Forest model predicting log-transformed prices to perform best in terms of all metrics. After re-estimation, the final model boasted 56.1% R-squared, & performed with 17 dollar MAE & 33.2 dollar RMSE, ca. 67% of the average price during out-of-sample testing. Finally, model diagnostics showed the model to perform fairly consistently given accommodation size (2-6 people) & most frequent neighbourhoods, yet RMSE decreased to 56% of average price when predicting apartments, vs 73% for condominium property types.
+This report investigates how to predict the prices at which apartments in Bangkok can be rented out on Airbnb. Below I discuss a number of features taken into account, compare 6 prediction models of varying complexity, & after choosing & re-estimating my final model, I  investigate expected performance across property types, the number of people accommodated, while investigating most important accommodation features. Viewers can access all project artifacts [here](https://github.com/BrunoHelmeczy/Prediction_Projects-CEU_DA3/tree/main/Bangkok_Airbnb). Based on 5-fold cross validation, I found the expanded Random Forest model predicting log-transformed prices to perform best in terms of all metrics. After re-estimation, the final model boasted 47.2% R-squared, & performed with 17.8 dollar MAE & 32.6 dollar RMSE, ca. 65% of the average price during out-of-sample testing. Finally, model diagnostics showed the model to perform fairly consistently given accommodation size (2-6 people), neighbourhoods, & property types, however in each case, the model performs better for the most frequent sub-groups, i.e. for rentals accommodating 2-3 people (25.5-27.7 RMSE), apartments (26.7 RMSE), or the 2 most frequent neighbourhoods, Khlong Toei & Vadhana (0.55-0.57 Normalized RMSE). 
 
-### Data, Cleaning & Feature Engineering
-
-The raw dataset was downloaded from- & is available at AirBnB-s website (from [here](http://data.insideairbnb.com/thailand/central-thailand/bangkok/2020-12-23/data/listings.csv.gz)), & comprises over 19.7K observations & 74 Variables, summarizing all accommodations in the Bangkok area available for rental, as of 23rd-24th December, 2020. After keeping only apartments-, & condominiums hosting between 2-6 people, 9962 observations remained to clean for analysis. To manage this feature space, i.e. to keep what's important & drop what is not, while looking to maintain intuition throughout the process, I grouped variables into 7 subjects (excluding ID variables): **Host** information, **Geo-Spatial**-, & **Property** information, **Sales**-, & **Availability**-related data, & **Reviews**-, & **Listings** data. 
+**Data, Cleaning & Feature Engineering:** The raw dataset was downloaded from- & is available at AirBnB-s website (from [here](http://data.insideairbnb.com/thailand/central-thailand/bangkok/2020-12-23/data/listings.csv.gz)), & comprises over 19.7K observations & 74 Variables, summarizing all accommodations in the Bangkok area available for rental, as of 23rd-24th December, 2020. After keeping only apartments-, & condominiums hosting between 2-6 people, 9962 observations remained to clean for analysis. To manage this feature space, i.e. to keep what's important & drop what is not, while looking to maintain intuition throughout the process, I grouped variables into 7 subjects (excluding ID variables): **Host** information, **Geo-Spatial**-, & **Property** information, **Sales**-, & **Availability**-related data, & **Reviews**-, & **Listings** data. 
 
 Some of these groups proved rather not useful, e.g. from **Geo-spatial** variable group only the **neighbourhood_cleansed** variable is retained, as latitudinal-, & longitudinal metrics are indirectly already captured by the neighbourhood they fall into, while the raw **neighbourhood** variable held 500+ values, also posing a linguistic challenge. Similarly, **Listings**-group variables were in essence all dropped, as they contain information regarding listings of different room/apartment types, or contain information already present in **Host**-related variables. My substantive rationale for that is **a)** the number of listings attributed to a host above all are a proxy for the likelihood of him/her being a scammer, rather then an attribute impacting rentals’ pricing, & **b)** even on AirBnb, this information is presented only as a host having either 1, or multiple listings online. As such, seeing as prices are rather market-, then inventory-based, a binary variable showing whether the host has only 1 listing seems sufficient. To be safe, the integer variable denoting how many listings a host has, is also kept, so a LASSO model could capture if either is less important by dropping it.
 
@@ -340,7 +338,7 @@ set.seed(1234)
 SumStatTable %>% as_hux()
 ```
 
-As can be seen above, the extended Random Forest model (rf_model_2) beat all other candidates, with 5-fold cross-validated performance of R-sqaured of 56%, & a RMSE of 20.2 USD, ca. 40% of the average listing price. As such, I recommend the extended Random Forest to estimate the clients' future listings' profitability. What's left is re-estimating the chosen model on the complete training dataset & test expected future performance ex-sample, utilizing data reserved only for this stage, 30% of the cleaned dataset. As visible below, the model performs substantially worse ex-sample, on par with LASSO's cross-validated performance, though beating both regression models in terms of Mean Average Error. This indicates a number of especially bad predictions to cause worse metrics for the final model, something expected when tuning models to predict log-prices & transforming them to raw price predictions. 
+As can be seen above, the extended Random Forest model (rf_model_2) beat all other candidates, with 5-fold cross-validated performance of R-sqaured of 56%, & a RMSE of 20.2 USD, ca. 40% of the average listing price. As such, I recommend the extended Random Forest to estimate the clients' future listings' profitability. What's left is re-estimating the chosen model on the complete training dataset & test expected future performance ex-sample, utilizing data reserved only for this stage, 30% of the cleaned dataset. As a sanity check, I also ran the level-price predicting model:
 
 ```{r Final Model Summary,  message = F,warning = F, echo = FALSE, fig.align='center', fig.height=2.5, fig.width=3.5}
 
@@ -400,8 +398,8 @@ PredvsAccPlot <- data_holdout_w_prediction %>% ggplot(aes(x = usd_price, y = usd
   geom_point(aes(y = predicted_price)) + 
   geom_line() +
   theme_tufte() +
-  labs(title = "Actual versus Predicted Prices",
-       x = "Actual Prices", y = "Predicted Prices")
+  labs(title = "Actual vs Predicted Prices",
+       x = "Actual Prices", y = "Predicted Prices (US Dollars)") 
 
 ######### create nice summary table of heterogeneity
 a <- data_holdout_w_prediction %>%
@@ -485,22 +483,20 @@ F14_CI_n_accomodate <- ggplot(predictionlev_holdout_summary, aes(x=factor(n_acco
   geom_bar(aes(y = fit ), stat="identity",  fill = "blue", alpha=0.7 ) +
   geom_errorbar(aes(ymin=pred_lwr, ymax=pred_upr, color = "Pred. interval"),width=.2) +
   #geom_errorbar(aes(ymin=conf_lwr, ymax=conf_upr, color = "Conf. interval"),width=.2) +
-  scale_y_continuous(name = "Predicted price (US dollars)") +
+  scale_y_continuous(name = "Predicted Price (US dollars)") +
   scale_x_discrete(name = "Accomodates (Persons)") +
   scale_color_manual(values=c("green", "green")) +
-  theme_tufte() +
-  theme(legend.title= element_blank(),legend.position="none")
+  theme_tufte() + 
+  labs(title = "Predicted Prices by Nr. of Pax") +
+  theme(legend.title = element_blank(),legend.position="none",
+        title = element_text(size = 6))
 
 
 grid.arrange(PredvsAccPlot,F14_CI_n_accomodate, ncol = 2)
 
 ```
 
-Please see the re-estimated random forest models' ex-sample performance summary statistics above. As a sanity check, I also ran the level-price predicting model. Surprisingly, though the level model performed far worse during cross-validation, it even improved its' performance marginally on the holdout data, resulting in very similar performance to the log-price prediction model.  
-
-plots of predicted prices scattered around the line indicating actual prices. Visibly, the chosen model tends to predict right on average up to 100 USD, however is very strongly under predicting prices above 100 USD, not having a single case of over-prediction above ca. 133 USD. One can see however, that the same model predicting level prices 
-
-I nevertheless maintain the models' validity, having cross-validated each of 6 models, including the chosen extend Random Forest model predicting level prices, which performed roughly twice as bad on the holdout set (also shown below, for reference). On the other hand, from a business perspective this means the chosen model can confidently estimate price ranges lower bounds, more useful to evaluate investment decisions.     
+Please see the re-estimated random forest models' ex-sample performance summary statistics above. Visibly, the level-price prediction model boasts higher MAE, yet lower RMSE meaning, though it is less right on average, it is also less frequently very wrong. For this reason, as well as due to improving ex-sample, i.e. not being overfitted, my final recommendation is the level-price expanded Random Forest model. Please see its performance, plotting predicted prices scattered around the line of actual prices. Visibly, the chosen model tends to predict right on average up to ca. 100 USD, however is under predicting prices above 125 USD on every occassion. From a business perspective, this means the chosen model can confidently estimate price ranges' lower bounds, more useful to evaluate investment decisions' profitability.     
 
 ```{r pred by size type location , message = F,warning = F, echo = FALSE, fig.align= 'center', fig.height=2.5,fig.width=3.5}
 
@@ -511,7 +507,7 @@ result_3 %>% as_hux()
 
 ### Variable Importance
 
-```{r Var Imp Plots,message = F,warning = F, echo = FALSE,fig.align= 'center', fig.height=2.5,fig.width= 6}
+```{r Var Imp Plots,message = F,warning = F, echo = FALSE,fig.align= 'center', fig.height=2 , fig.width= 6}
 #########################################################################################
 # Variable Importance Plots -------------------------------------------------------
 #########################################################################################
@@ -528,7 +524,7 @@ group.importance <- function(rf.obj, groups) {
   # 2) varimp plot grouped
   # 3) varimp plot , top 20 Amenities
 
-  rf_model_final_var_imp <- importance(rf_model_2final$finalModel)/1000
+  rf_model_final_var_imp <- importance(rf_model_final_lev$finalModel)/1000
   rf_model_final_var_imp_df <-
     data.frame(varname = names(rf_model_final_var_imp),imp = rf_model_final_var_imp) %>%
     arrange(desc(imp)) %>%
@@ -538,10 +534,8 @@ group.importance <- function(rf.obj, groups) {
   ##############################
   # 1) full varimp plot, above a cutoff
   ##############################
-  
-  
-  cutoff = 0.05
-  rf_model_final_var_imp_plot <- ggplot(rf_model_final_var_imp_df[rf_model_final_var_imp_df$imp>cutoff,],
+    cutoff = 0.05
+  rf_model_final_var_imp_plot <- ggplot(rf_model_final_var_imp_df[1:20,],
                                     aes(x=reorder(varname, imp), y=imp_percentage)) +
     geom_point(color="blue", size=1.5) +
     geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=1) +
@@ -560,7 +554,7 @@ group.importance <- function(rf.obj, groups) {
   ##############################
   # grouped variable importance - keep binaries created off factors together
   
-  varnames <- rf_model_2$finalModel$xNames
+  varnames <- rf_model_final_lev$finalModel$xNames
   f_neighbourhood_cleansed_varnames <- grep("f_neighbourhood_cleansed",varnames, value = TRUE)
   f_property_type_varnames <- grep("f_property_type",varnames, value = TRUE)
   n_accommodates_varnames <- grep("n_accommodates",varnames,value = T)
@@ -588,7 +582,7 @@ group.importance <- function(rf.obj, groups) {
     Review_Scores       = n_reviews,
     Stay_Restrictions   = min_nights)
 #### ####    
-  rf_model_final_var_imp_grouped <- group.importance(rf_model_2final$finalModel, groups)
+  rf_model_final_var_imp_grouped <- group.importance(rf_model_final_lev$finalModel, groups)
   rf_model_final_var_imp_grouped_df <- data.frame(varname = rownames(rf_model_final_var_imp_grouped),
                                               imp = rf_model_final_var_imp_grouped[,1])  %>%
     mutate(imp_percentage = imp/sum(imp))
@@ -636,20 +630,11 @@ group.importance <- function(rf.obj, groups) {
 
 ```
 
+Above, I'd like to point out the most important features for the chosen model, & as such, to determining an Airbnb listings' price. The 3 plots above 1st show raw features, where one can see Nr. of bedrooms & bathrooms in a rental, as well as how many other apartments does a host have are most important, each comtributing over 4% to the model. Apartments have 1000s of features however, so the 2nd plot groups all features used into 12 aspects, aiming to recommend prospective hosts what aspects to focus on: 1st it's visible that amenities are overwhelmingly the most important aspect of pricing according to our model (20+ %), while Hosts' trustworthiness & the location are 2nd & 3rd (ca. 10% each). Interestingly, the type of property in question has very little impact. Finally, as Amenities are the most important aspect to pricing, a top 20 list comprises the 3rd plot. Apparently, after the most important meal of the day, 2 safety / security-related amenities are most important, while fitness & parking possibilities round out the top 5.
 
-```{r var distributions,  message = F, warning = F, echo = FALSE,results = "asis", fig.align= 'center', fig.height = 2.5, fig.width = 2}
-allplots <- for(i in df %>% colnames()){
-  plt <- ggplot(df, aes_string(x=i)) +
-    geom_bar() + 
-    theme_tufte() + 
-    labs(title = paste0("Frequency Distribution of ",i) )
-  print(plt)
-#  Sys.sleep(0.1)
-}
+**Partial Dependencies:** On a final note, I'd like to discuss how the recommended model performs across perhaps the 3 most obviously important property features: Nr. of People accommodated, Apartment type & Neighborhoods. As can be seen, there is a distinct jump in model performance above 3 people accommodated, to 40+ USD RMSE vs 25.5-27.7 for 2-3 people accommodated. Apartments are also distinctly performing better vs condominiums, possibly due to their less varied nature. Finally, the most hardly comparable feature, yet the most important since Conrad Hilton tossed the phrase, viewer can see the model performs significantly better the overall in 3 of the top5 neighbourhoods in the dataset, of which Vadhana seems to be a rather expensive area, meaning the model performs better than average where it seems more important.
 
-allplots
+### Conclusion
 
-
-```
-
+This report investigated how to best predict Airbnb listings' prices in Bangkok. 6 models were tested, from which the expanded Random Forest model predicting level prices emerged as best, with ex-sample performance of 17.80 USD Mean Absolute Error, & 32.60 USD Root Mean Square Error (ca. 66% of the Average rental Price). Though the model consistently under predicts prices above 125 USD, it distinctly outperformes the benchmark OLS model. The chosen Random Foreast model also outlined a number of key features prospective hosts should focus on satisfying to the best of their abilities. Amenities seem to be overwhelmingly the most important, followed by the quality & quantity of information th ehost has provided, while the specific property type seems to be only minimally important. On a final note, readers may also see that the proposed model performs better then average where it matters most, for accommodations hosting 2-3 people, for traditional apartments, & for the 2 most frequented neighbourhoods in Bangkok.
 
