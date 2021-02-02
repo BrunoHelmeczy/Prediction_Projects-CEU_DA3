@@ -31,12 +31,14 @@ df <- BangkokClean
   # loop through column names 
   # Make Conditional -> check class / range 
     # Dummies / Logicals -> store varnames, 1 Big Racing bar -> geom_bar + geom_point
-    df %>% select(matches("^d_|^l_|^flag_")) %>% colnames()
+#    df %>% dplyr::select(matches("^d_|^l_|^flag_")) %>% colnames()
+
     # Numericals -> plot & print Histograms
-    df %>% select(matches("^usd_")) %>% colnames()
-    df %>% select(matches("^n_")) %>% select(-matches("_ln|_2")) %>% colnames()
+#    df %>% dplyr::select(matches("^usd_")) %>% colnames()
+#    df %>% dplyr::select(matches("^n_")) %>% select(-matches("_ln|_2")) %>% colnames()
+
     # factors -> horizontal stacked 100% bars with color scales 
-    df %>% select(matches("^f_")) %>% colnames()
+#    df %>% dplyr::select(matches("^f_")) %>% colnames()
 
 
 allplots <- for(i in df %>% colnames()){
@@ -133,7 +135,7 @@ set.seed(1)
 Eventually, I grouped my variables into **Property-**, **Host-**, **Reviews-**, & **Amenities**-related, seeing these as the varying degrees, & order of additional information a guest might be looking for, to decide whether to stay at a given listed rental or not. For OLS & LASSO models, I also incorporated interactions between key property-related variables & all amenities, & predicted log-transformed price in 5 of 6 models, seeing how skewed it is. Please see the finalized variable groups, & derived predictor groupings in bulleted lists below:
 
 
-```{r price distr,  message = F,warning = F, cache= TRUE ,echo = FALSE,results = "asis",fig.align='center' , fig.height = 3, fig.width = 6}
+```{r price distr,  message = F,warning = F, cache= TRUE ,echo = FALSE,results = "asis",fig.align='center' , fig.height = 2.5, fig.width = 6}
 
 PriceHist <- df %>% ggplot(aes(x = usd_price)) +
   geom_histogram( color = "red", fill = "navyblue",bins = 50) + theme_tufte() +
@@ -597,4 +599,4 @@ allplots
 
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
