@@ -20,7 +20,7 @@ rm(list=ls())
 
 BangkokClean <- read.csv("https://raw.githubusercontent.com/BrunoHelmeczy/Prediction_Projects-CEU_DA3/main/Bangkok_Airbnb/Data/Clean/airbnb_bangkok_cleaned.csv",
                          stringsAsFactors = T)
-df <- BangkokClean
+df <- BangkokClean 
 
 df %>% dplyr::select(usd_price) %>% mutate(g100s = round(usd_price,-2)) %>% 
   group_by(g100s) %>% summarize(count = n())

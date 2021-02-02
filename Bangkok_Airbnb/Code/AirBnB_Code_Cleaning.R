@@ -557,7 +557,7 @@ rownames(VarDescribe) <- NULL
 
 #### 2.1) Price in USD ####
 # 27 Obs.s > 1000 -> delete
-df <- df %>% filter(usd_price <= 500)
+df <- df %>% filter(usd_price <= 350)
 df[c("usd_price")] %>% ggplot(aes(x = usd_price)) + 
   geom_histogram()
 # Skewed as hell -> log transform
