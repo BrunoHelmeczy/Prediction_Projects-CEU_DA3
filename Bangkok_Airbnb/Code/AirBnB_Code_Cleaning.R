@@ -556,7 +556,7 @@ rownames(VarDescribe) <- NULL
 #### 2) Feature Engineer ####
 
 #### 2.1) Price in USD ####
-# 27 Obs.s > 1000 -> delete
+# 116 Obs.s > 350 -> delete
 df <- df %>% filter(usd_price <= 350)
 df[c("usd_price")] %>% ggplot(aes(x = usd_price)) + 
   geom_histogram()

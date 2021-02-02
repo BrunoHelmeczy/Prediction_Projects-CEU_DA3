@@ -1,8 +1,11 @@
 ---
 title: "Price prediction for Airbnb Listings in Bangkok"
 author: "Bruno Helmeczy"
-date: "01/02/2021"
-output: pdf_document
+date: "02/02/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -41,6 +44,7 @@ df <- BangkokClean
 #    df %>% dplyr::select(matches("^f_")) %>% colnames()
 
 
+
 allplots <- for(i in df %>% colnames()){
   plt <- ggplot(df, aes_string(x=i)) +
     geom_bar() + theme_tufte() + labs(title = paste0("Frequency Distribution of ",i) )
@@ -52,7 +56,7 @@ allplots <- for(i in df %>% colnames()){
 
 ## Abstract
 
-This report investigates how to predict the prices at which apartments in Bangkok can be rented out on Airbnb. Below I discuss a number of features taken into account, compare 6 prediction models of varying complexity, & after choosing & re-estimating my final model, I  investigate expected performance across property types, the number of people accommodated, while investigating most important accommodation features. Based on 5-fold cross validation, I found the expanded Random Forest model predicting log-transformed prices to perform best in terms of all metrics. After re-estimation, the final model boasted 54.1% R-squared, & performed with 21 dollar MAE & 51.9 dollar RMSE, ca. 95% of the average price during out-of-sample testing. Finally, model diagnostics showed the model to perform fairly consistently given accommodation size (2-6 people) & property type (apartment or condominium), yet RMSE decreased by ca. 40%, to 28 dollar RMSE, when considering the most frequent neighborhood in the dataset: Khlong Toei.  
+This report investigates how to predict the prices at which apartments in Bangkok can be rented out on Airbnb. Below I discuss a number of features taken into account, compare 6 prediction models of varying complexity, & after choosing & re-estimating my final model, I  investigate expected performance across property types, the number of people accommodated, while investigating most important accommodation features. Based on 5-fold cross validation, I found the expanded Random Forest model predicting log-transformed prices to perform best in terms of all metrics. After re-estimation, the final model boasted 56.1% R-squared, & performed with 17 dollar MAE & 33.2 dollar RMSE, ca. 67% of the average price during out-of-sample testing. Finally, model diagnostics showed the model to perform fairly consistently given accommodation size (2-6 people) & most frequent neighbourhoods, yet RMSE decreased to 56% of average price when predicting apartments, vs 73% for condominium property types.
 
 ### Data, Cleaning & Feature Engineering
 
@@ -62,11 +66,11 @@ Some of these groups proved rather not useful, e.g. from **Geo-spatial** variabl
 
 Speaking of **Host**-variables, I view their primary purpose is indicating whether a listing is a scam or not, as these are what both Airbnb & prospective guests use this information for. Thus, 6 of 8 Host-variables are logical / binary variables, while host verifications are a list of credential details (similarly to amenities being a list of objects in the rental property). Any single 1 of these credential details is not important, say whether a host has an email address or Facebook profile, however the total number of credentials may indicate hosts’ credibility, & professionalism, so I simply counted the **number of verifications** a host provided. 
 
-**Guest Reviews**-related variables: As proxy for a hosts' experience & recent activity, Nr. of days since their 1st of last reviews were calculated. Ca. 34% NAs, for hosts without reviews - seen from the same observations also missing review scores, & Nr. of reviews per month. In terms of review ratings, only the overall review scores are kept, being an aggregation of sub-scores, & for Nr. of days since 1st & last reviews, instead of the median-, the maximum values were imputed, signifying the quesi-infinite number of days the host has had a review. To impute NAs for review scores, I took the arithmetic mean instead of the median. Though the mean is less robust to extreme values, there is some level of uncertainty arising in guests' minds, if seeing there are no reviews what so ever for a listing. I intend to take this into account by using the mean instead.
+**Guest Reviews**-related variables: As proxy for a hosts' experience & recent activity, Nr. of days since their 1st of last reviews were calculated. Ca. 34% NAs, for hosts without reviews - seen from the same observations also missing review scores, & Nr. of reviews per month. In terms of review ratings, only the overall review scores are kept, being an aggregation of sub-scores, & for Nr. of days since 1st & last reviews, instead of the median-, the maximum values were imputed, signifying the quesi-infinite number of days the host has had a review. To impute NAs for review scores, I took the arithmetic mean instead of the median. Though the mean is less robust to extreme values, there is some level of uncertainty arising in guests' minds, if seeing there are no reviews what so ever for a listing. I intend to take this into account by using the mean.
 
-**Sales & Availability**-related variables are what hoteliers would consider most obviously relating to prices, & besides price, also include minimum-maximum stay-restrictions, as well as the number of available room nights in the coming periods of different length. I argue the number of room nights a host has sold more closely relates to what price he asks for, rather then the number of room nights he has available in the future, given the confidence it may instill. So, I transformed these to denote the number of rooms sold in future periods of different lengths, & eventually reduced these to factor variables. With stay-restrictions, I 1st wrote a function to calculate how identical these columns are, allowing me eventually to retain only minimum stay nights, as maximum nights contained many extreme-, & missing values.
+**Sales & Availability**-related variables are what hoteliers would consider most obviously relating to prices, & besides price, also include minimum-maximum stay-restrictions, as well as the number of available room nights in the coming periods of different length. I argue the number of room nights a host has sold more closely relates to what price he asks for, rather then the number of room nights he has available in the future, given the confidence it may instill. So, I transformed these to denote the number of rooms sold in future periods of different lengths, & eventually reduced these to factor variables. With stay-restrictions, I 1st wrote a function to calculate how identical these columns are, allowing me eventually to retain only minimum stay nights, as maximum nights contained many extreme-, & missing values. 
 
-**Property Variables** The final, & perhaps most important feature engineering decision is regarding **Property**-related variables, most strongly contributing the dropping observations, & 48 dummy variables standing for amenities. To obtain data only for apartments, I 1st filtered the room_type variable to only include entire homes or apartments, & also removed listings where the property type was described as e.g. Room, Castle, hostel, or treehouse & other properties of similarly different nature. This still left some non-trivial property types, like Bungalows, Guest Suites, Lofts & Villas, but I view these as legitimate alternatives in potential guests’ minds, whereas I hazard, the type of guest looking to book a Castle or a Treehouse is materially different then someone looking to stay in apartments.
+**Property Variables** The final, & perhaps most important feature engineering decision is regarding **Property**-related variables, most strongly contributing the dropping observations, & 48 dummy variables standing for amenities. To obtain data only for apartments, I 1st filtered the room_type variable to only include entire homes or apartments, & also removed listings where the property type was described as e.g. Room, Castle, hostel, or treehouse & other properties of similarly different nature. This still left some non-trivial property types, like Bungalows, Guest Suites, Lofts & Villas, but I view these as legitimate alternatives in potential guests’ minds, whereas I hazard, the type of guest looking to book a Castle or a Treehouse is materially different then someone looking to stay in apartments. Once filtered for these property types, listings priced above 350 USD were also dropped, resulting in the cleaned dataset holding 9866 observations.
 
 The greatest cleaning challenge however, is of handling the **amenities** column. After creating a dummy-variable table of all possible amenities, I wrote 3 functions to handle this variable: 1st to coerce columns whose names match certain sets, & combinations of keywords; 2nd to remove duplicate columns, & 3rd to check the frequency of Yes-es in the remaining dummy columns, latter looking to remove amenities with imbalanced values, by myself defined with having less then 1% Yes values. All this resulted in reducing the number of amenities dummies from 262 to 48.
 
@@ -96,14 +100,14 @@ df <- df %>% mutate(
 )
 
 #### Variable Grouping ####
-  Prop_vars <- df %>% select(-matches(".*host.*|.*review.*|^d_|n_days|^usd")) %>% colnames()
-  Host_vars <- df %>% select(matches(".*host.*")) %>%  colnames()
-  Review_vars <- df %>% select(matches(".*review.*|n_days")) %>%  colnames()
-  Amenities_vars <- df %>% select(matches("^d_")) %>%  colnames()
+  Prop_vars <- df %>% dplyr::select(-matches(".*host.*|.*review.*|^d_|n_days|^usd")) %>% colnames()
+  Host_vars <- df %>% dplyr::select(matches(".*host.*")) %>%  colnames()
+  Review_vars <- df %>% dplyr::select(matches(".*review.*|n_days")) %>%  colnames()
+  Amenities_vars <- df %>% dplyr::select(matches("^d_")) %>%  colnames()
 
 # Interactions: Amenities + Props4Interactions
   #  Props4Interactions 
-  Props4Interactions <- c(df[Prop_vars] %>% select(matches("^f_")) %>% colnames(),"n_accommodates") 
+  Props4Interactions <- c(df[Prop_vars] %>% dplyr::select(matches("^f_")) %>% colnames(),"n_accommodates") 
 
   Interactions <- paste0(paste0("( ",paste0(Props4Interactions, collapse = " + ")," )")
                          ," * ",
@@ -135,7 +139,7 @@ set.seed(1)
 Eventually, I grouped my variables into **Property-**, **Host-**, **Reviews-**, & **Amenities**-related, seeing these as the varying degrees, & order of additional information a guest might be looking for, to decide whether to stay at a given listed rental or not. For OLS & LASSO models, I also incorporated interactions between key property-related variables & all amenities, & predicted log-transformed price in 5 of 6 models, seeing how skewed it is. Please see the finalized variable groups, & derived predictor groupings in bulleted lists below:
 
 
-```{r price distr,  message = F,warning = F, cache= TRUE ,echo = FALSE,results = "asis",fig.align='center' , fig.height = 2.5, fig.width = 6}
+```{r price distr,  message = F,warning = F, echo = FALSE,results = "asis",fig.align='center' , fig.height = 2, fig.width = 6}
 
 PriceHist <- df %>% ggplot(aes(x = usd_price)) +
   geom_histogram( color = "red", fill = "navyblue",bins = 50) + theme_tufte() +
@@ -153,12 +157,18 @@ grid.arrange(PriceHist,LnPriceHist, ncol = 2)
 
   - **Property**-related: Property Type, Nr. of Guests accommodated (level, log-,level squared, log- squared), Nr. of Beds-, Bedrooms & Bathrooms, Neighbourhood Cleansed, Has Availability, Nr. of Rooms Sold in coming 30-, 60-, 90-, & 365 days.
   - **Host**-related: Host is owner, Nr. of hosts' listings & verifications, & whether he greets you, accept every reservation, has a profile pic, & his/her identity is verified.
-  - **Reviews**-related: 
-  - **Amenities:**
-  - **Interactions:**
+  - **Reviews**-related: Nr. of Reviews (Total & per month), Average Review score, Nr. of days since 1st & last reviews (Level- & Log form), & Flag-variables for missing observations on review per month, score rating, & Nr. of days since last review variables. 
+  - **Amenities:**-related: 48 dummy variables indicating whether a collection of amenities are present. 
+  - **Interactions:** I hazard the presence of certain amenities affects rental prices to varying degrees depending on property characteristics, e.g. though wifi is a given necessity in any context, it's perhaps even more important in larger accommodations to keep children at peace. Thus, all 48 amenities were interacted with core property features, Nr. of beds / bedrooms / bathroooms & people accommodated.
+  
+  - **Predictor Group 1:** Property Variable group
+  - **Predictor Group 2:** Predictor Group 1 + Host-, & Reviews variable groups
+  - **Predictor Group 3:** Predictor Group 2 + Amenities
+  - **Predictor Group E:** Predictor Group 3 + Interactions
+    
+Finally, please see the created Predictor groups above. In the 4 best models summarized below, LASSO utilizes Predictor Group E, the simplified Random Forest (rf_model_1) used Predictor Group 2, & the rest Predictor Group 3. Due to prices' strong skewness shown earlier, all models predict log-prices, which were subsequently transformed, to obtain price predictions & calculate MAE & RMSE. 
 
-
-```{r models ,  message = F,warning = F, echo = FALSE, fig.align='center', fig.height = 3, fig.width = 6, cache = TRUE}
+```{r models ,  message = F,warning = F, echo = FALSE, fig.align='center', fig.height = 3, fig.width = 6}
 
 #### OLS ####
  set.seed(1234)
@@ -251,13 +261,21 @@ set.seed(1234)
     trControl = train_control,
     tuneGrid = tune_grid,
     importance = "impurity")
+  
+  RF2Lev <- NULL
+  RF2Lev[1] <- "rf_model_2_level"
+  RF2Lev[2] <- round(mean(rf_model_2_lev$results$Rsquared),3)
+  RF2Lev[3] <- round(mean(rf_model_2_lev$results$MAE),3)
+  RF2Lev[4] <- round(mean(rf_model_2_lev$results$RMSE),3)
+  RF2Lev[5] <- round(as.numeric(RF2Lev[4])/mean(data_train$usd_price),3)
 
 #------------------ Model Comparison ####
 final_models <-
   list("OLS" = ols_model,
        "LASSO (model w/ interactions)" = lasso_model,
        "Random forest (smaller)" = rf_model_1,
-       "Random forest" = rf_model_2)
+       "Random forest" = rf_model_2,
+       "Random forest - Level" = rf_model_2_lev)
   
 results <- resamples(final_models) %>% summary()
 models <- c("ols_model","lasso_model","rf_model_1","rf_model_2")  
@@ -284,7 +302,9 @@ SumStatTable <- as.data.frame(cbind(models,Rsq,rbindlist(lapply(Predictions, fun
   tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_train$usd_price),3)
   return(tl)
 }))))
-rownames(SumStatTable) <- models
+#rownames(SumStatTable) <- models
+
+SumStatTable <- as.data.frame(rbind(SumStatTable,RF2Lev))
 
 #### Final Model Re-Estimation ####
 train_control <- trainControl(method = "none",verboseIter = FALSE)  
@@ -297,7 +317,7 @@ tune_grid <- expand.grid(
 )
 
 set.seed(1234)
-  rf_model_final <- train(
+  rf_model_2final <- train(
     formula(paste0("usd_price_ln", paste0(" ~ ",paste0(predictors3, collapse = " + ")))),
     data = data_train,
     method = "ranger",
@@ -305,27 +325,39 @@ set.seed(1234)
     tuneGrid = tune_grid,
     importance = "impurity")
 
+set.seed(1234)
+  rf_model_final_lev <- train(
+    formula(paste0("usd_price", paste0(" ~ ",paste0(predictors3, collapse = " + ")))),
+    data = data_train,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity")
+  
+  
 #### Summ.Table ####
 
 SumStatTable %>% as_hux()
 ```
 
+As can be seen above, the extended Random Forest model (rf_model_2) beat all other candidates, with 5-fold cross-validated performance of R-sqaured of 56%, & a RMSE of 20.2 USD, ca. 40% of the average listing price. As such, I recommend the extended Random Forest to estimate the clients' future listings' profitability. What's left is re-estimating the chosen model on the complete training dataset & test expected future performance ex-sample, utilizing data reserved only for this stage, 30% of the cleaned dataset. As visible below, the model performs substantially worse ex-sample, on par with LASSO's cross-validated performance, though beating both regression models in terms of Mean Average Error. This indicates a number of especially bad predictions to cause worse metrics for the final model, something expected when tuning models to predict log-prices & transforming them to raw price predictions. 
 
-```{r Final Model Summary, cache= T,  message = F,warning = F, echo = FALSE, fig.align='center', fig.height=2.5, fig.width=3.5, cache=T}
+```{r Final Model Summary,  message = F,warning = F, echo = FALSE, fig.align='center', fig.height=2.5, fig.width=3.5}
 
 #### Prediction & Summary of RF_2_Final Model ####
 data_holdout_w_prediction <- data_holdout %>%
-  mutate(predicted_price_ln = predict(rf_model_final, newdata = data_holdout))
+  mutate(predicted_price_ln = predict(rf_model_2final, newdata = data_holdout))
 
 # Transform ln(yhat) -> yhat
 data_holdout_w_prediction <- data_holdout_w_prediction %>% 
   mutate(res = predicted_price_ln - usd_price_ln)
 StDev <- sd(data_holdout_w_prediction$res)
 data_holdout_w_prediction$predicted_price <- exp(data_holdout_w_prediction$predicted_price_ln) * exp((StDev^2)/2)
-Rsq <- round(rf_model_final$finalModel$r.squared,3)
 
-SumStatsFinalModelTable <- 
-  as.data.frame(cbind(Rsq,rbindlist(lapply(data_holdout_w_prediction[c("predicted_price")], function(x) {
+Rsq <- round(rf_model_2final$finalModel$r.squared,3)
+modelname <- "Final Full Random Forest Model"
+SumStatsFinalModelTable1 <- 
+  as.data.frame(cbind(modelname,Rsq,rbindlist(lapply(data_holdout_w_prediction[c("predicted_price")], function(x) {
   tl <- list()
   tl[['MAE']] <- round(MAE(x,data_holdout$usd_price),3)
   tl[['RMSE']] <- round(RMSE(x, data_holdout$usd_price),3)
@@ -333,17 +365,31 @@ SumStatsFinalModelTable <-
   return(tl)
 }))))
 
-rownames(SumStatsFinalModelTable) <- "Final Random Forest Model"
-#colnames(SumStatsFinalModelTable) <- NULL
+##### Level-RF Prediction
 
-SumStatsFinalModelTable %>% as_hux()  
+#### Prediction & Summary of RF_2_Final Model ####
+data_holdout_w_prediction <- data_holdout %>%
+  mutate(predicted_price = predict(rf_model_final_lev, newdata = data_holdout))
+
+Rsq <- round(rf_model_final_lev$finalModel$r.squared,3)
+modelname <- "Full Random Forest w Level Price"
+SumStatsFinalModelTable2 <- 
+  as.data.frame(cbind(modelname,Rsq,rbindlist(lapply(data_holdout_w_prediction[c("predicted_price")], function(x) {
+  tl <- list()
+  tl[['MAE']] <- round(MAE(x,data_holdout$usd_price),3)
+  tl[['RMSE']] <- round(RMSE(x, data_holdout$usd_price),3)
+  tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_holdout$usd_price),3)
+  return(tl)
+}))))
+
+as.data.frame(rbind(SumStatsFinalModelTable1,
+                    SumStatsFinalModelTable2)) %>% as_hux()  
 ```
 
 
 ## Model Implications
 
-
-```{r,  message = F,warning = F, echo = FALSE,results = "asis", fig.height=2.5,fig.width=6, cache=T}
+```{r diagnostics,  message = F,warning = F, echo = FALSE,results = "asis", fig.height=2.5,fig.width=6}
 
 # MODEL DIAGNOSTICS -------------------------------------------------------
 #
@@ -407,9 +453,7 @@ result_3 <- rbind(line2, a, line1, c, line3, b, d) %>%
 
 ```
 
-
-
-```{r,  message = F,warning = F, echo = FALSE,fig.align= 'center', fig.height=2.5,fig.width = 6, cache=T}
+```{r plots,  message = F,warning = F, echo = FALSE,fig.align= 'center', fig.height=2.5,fig.width = 6}
 
 # FIGURES FOR FITTED VS ACTUAL OUTCOME VARIABLES #
 ###################################################
@@ -420,7 +464,7 @@ meanY <-mean(Ylev)
 sdY <- sd(Ylev)
 
 # Predicted values
-predictionlev_holdout_pred <- data_holdout_w_prediction %>% select(predicted_price) %>%  #%>%
+predictionlev_holdout_pred <- data_holdout_w_prediction %>% dplyr::select(predicted_price) %>%  #%>%
   mutate(pred_lwr = predicted_price - sdY, 
          pred_upr = predicted_price + sdY)
 
@@ -452,8 +496,13 @@ grid.arrange(PredvsAccPlot,F14_CI_n_accomodate, ncol = 2)
 
 ```
 
+Please see the re-estimated random forest models' ex-sample performance summary statistics above. As a sanity check, I also ran the level-price predicting model. Surprisingly, though the level model performed far worse during cross-validation, it even improved its' performance marginally on the holdout data, resulting in very similar performance to the log-price prediction model.  
 
-```{r,  message = F,warning = F, echo = FALSE, fig.align= 'center', fig.height=2.5,fig.width=3.5, cache=T}
+plots of predicted prices scattered around the line indicating actual prices. Visibly, the chosen model tends to predict right on average up to 100 USD, however is very strongly under predicting prices above 100 USD, not having a single case of over-prediction above ca. 133 USD. One can see however, that the same model predicting level prices 
+
+I nevertheless maintain the models' validity, having cross-validated each of 6 models, including the chosen extend Random Forest model predicting level prices, which performed roughly twice as bad on the holdout set (also shown below, for reference). On the other hand, from a business perspective this means the chosen model can confidently estimate price ranges lower bounds, more useful to evaluate investment decisions.     
+
+```{r pred by size type location , message = F,warning = F, echo = FALSE, fig.align= 'center', fig.height=2.5,fig.width=3.5}
 
 result_3 %>% as_hux()  
 
@@ -462,7 +511,7 @@ result_3 %>% as_hux()
 
 ### Variable Importance
 
-```{r Var Imp Plots,message = F,warning = F, echo = FALSE,fig.align= 'center', fig.height=2.5,fig.width=3.5, cache = T}
+```{r Var Imp Plots,message = F,warning = F, echo = FALSE,fig.align= 'center', fig.height=2.5,fig.width= 6}
 #########################################################################################
 # Variable Importance Plots -------------------------------------------------------
 #########################################################################################
@@ -479,7 +528,7 @@ group.importance <- function(rf.obj, groups) {
   # 2) varimp plot grouped
   # 3) varimp plot , top 20 Amenities
 
-  rf_model_final_var_imp <- importance(rf_model_final$finalModel)/1000
+  rf_model_final_var_imp <- importance(rf_model_2final$finalModel)/1000
   rf_model_final_var_imp_df <-
     data.frame(varname = names(rf_model_final_var_imp),imp = rf_model_final_var_imp) %>%
     arrange(desc(imp)) %>%
@@ -496,13 +545,15 @@ group.importance <- function(rf.obj, groups) {
                                     aes(x=reorder(varname, imp), y=imp_percentage)) +
     geom_point(color="blue", size=1.5) +
     geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=1) +
-    ylab("Importance (Percent)") +
-    xlab("Variable Name") +
+    labs(y ="Importance (Percent)" ,
+         x = "Variable Names",
+         title = "Raw Features") +
     coord_flip() +
     scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
     theme_tufte() +
     theme(axis.text.x = element_text(size=6), axis.text.y = element_text(size=6),
-          axis.title.x = element_text(size=6), axis.title.y = element_text(size=6))
+          axis.title.x = element_text(size=6), axis.title.y = element_text(size=6),
+          title = element_text(size = 6))
 
   ##############################
   # 2) varimp plot grouped
@@ -536,24 +587,26 @@ group.importance <- function(rf.obj, groups) {
     Nr_Bathrooms        = f_bathrooms,
     Review_Scores       = n_reviews,
     Stay_Restrictions   = min_nights)
-    
-  rf_model_final_var_imp_grouped <- group.importance(rf_model_final$finalModel, groups)
+#### ####    
+  rf_model_final_var_imp_grouped <- group.importance(rf_model_2final$finalModel, groups)
   rf_model_final_var_imp_grouped_df <- data.frame(varname = rownames(rf_model_final_var_imp_grouped),
                                               imp = rf_model_final_var_imp_grouped[,1])  %>%
     mutate(imp_percentage = imp/sum(imp))
   
   rf_model_final_var_imp_grouped_plot <-
-    ggplot(rf_model_final_var_imp_grouped_df, aes(x=reorder(varname, imp), y=imp_percentage)) +
+    ggplot(rf_model_final_var_imp_grouped_df, 
+           aes(x=reorder(varname, imp), y=imp_percentage)) +
     geom_point(color="blue", size=1) +
-    geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=0.7) +
-    ylab("Importance (Percent)") +   xlab("Variable Name") +
+    geom_segment(aes(x=varname,xend=varname,
+                     y=0,yend=imp_percentage), color="blue", size=0.7) +
+    labs( y = "Importance (Percent)", title = "Grouped Variables",
+          x = "") +
     coord_flip() +
-    # expand=c(0,0),
     scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
     theme_tufte() +
-    theme(axis.text.x = element_text(size=6), 
-          axis.text.y = element_text(size=8),
-          axis.title.x = element_text(size=8), axis.title.y = element_text(size=4))
+    theme(axis.text.x = element_text(size=5), axis.text.y = element_text(size=6),
+          axis.title.x = element_text(size=5), axis.title.y = element_blank(),
+          title = element_text(size = 6))
   
 ##########################################
   # 3) full varimp plot, top 20 amenities
@@ -567,14 +620,14 @@ group.importance <- function(rf.obj, groups) {
   rf_model_final_var_imp_plot_b <- ggplot(OnlyAmens[1:20,], aes(x=reorder(varname, imp), y=imp_percentage)) +
     geom_point(color="blue", size=1) +
     geom_segment(aes(x=varname,xend=varname,y=0,yend=imp_percentage), color="blue", size=0.75) +
-    labs(y = "Importance (Percent)", x = "Variable Name",
-         title = "Amenities' Importance for Price prediction") +
+    labs(y = "Importance (Percent)", x = "",
+         title = "Top Amenities") +
     coord_flip() +
     scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
     theme_tufte() +
     theme(axis.text.x = element_text(size=6), axis.text.y = element_text(size=6),
-          axis.title.x = element_text(size=6), axis.title.y = element_text(size=4),
-          title = element_text(size = 10))
+          axis.title.x = element_text(size=6), axis.title.y = element_blank(),
+          title = element_text(size = 6))
  
  
   grid.arrange(rf_model_final_var_imp_plot,
@@ -584,7 +637,7 @@ group.importance <- function(rf.obj, groups) {
 ```
 
 
-```{r ,  message = F,warning = F, echo = FALSE,results = "asis", fig.height=2.5,fig.width=3.5}
+```{r var distributions,  message = F, warning = F, echo = FALSE,results = "asis", fig.align= 'center', fig.height = 2.5, fig.width = 2}
 allplots <- for(i in df %>% colnames()){
   plt <- ggplot(df, aes_string(x=i)) +
     geom_bar() + 
