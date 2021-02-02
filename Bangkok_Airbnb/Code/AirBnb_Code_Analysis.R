@@ -14,12 +14,18 @@ library(stringr)
 library(dplyr) 
 library(ggthemes)
 library(rpart)
+library(ggplot2)
 
 rm(list=ls())
 
 BangkokClean <- read.csv("https://raw.githubusercontent.com/BrunoHelmeczy/Prediction_Projects-CEU_DA3/main/Bangkok_Airbnb/Data/Clean/airbnb_bangkok_cleaned.csv",
                          stringsAsFactors = T)
 df <- BangkokClean
+
+df %>% dplyr::select(usd_price) %>% mutate(g100s = round(usd_price,-2)) %>% 
+  group_by(g100s) %>% summarize(count = n())
+
+df %>% filter(usd_price >= 500) %>% nrow()
 
 #### 1) Plot var distributions en-mass ####
     # Colnames selection:  df %>% select(-matches("^d_|^l_")
@@ -37,6 +43,14 @@ allplots <- for(i in df %>% colnames()){
 }
 
 
+df %>% select(matches("^d_|^l_|^flag_")) %>% colnames()
+df %>% select(matches("^f_")) %>% colnames()
+df %>% select(matches("^usd_")) %>% colnames()
+df %>% select(matches("^n_")) %>% select(-matches("_ln|_2")) %>% colnames()
+
+df %>% select(-matches("^f_|^d_|^l_|^flag_|^usd_|_ln|_2|^n_")) %>% colnames()
+
+df  %>% colnames()
 
 #### Modelling ####
 
@@ -82,15 +96,24 @@ df <- df %>% mutate(
   predictors2 <- c(Prop_vars,Host_vars,Review_vars)
   predictors3 <- c(Prop_vars,Host_vars,Review_vars,Amenities_vars)
   predictorsE <- c(Prop_vars,Host_vars,Review_vars,Amenities_vars,Interactions)
+  
+  
+PriceHist <- df %>% ggplot(aes(x = usd_price)) +
+  geom_histogram( color = "red", fill = "navyblue",bins = 50) + theme_tufte() +
+  labs(title = "Price frequency distribution", x = "Price",
+       y = "Frequency Count") + xlim(0,300)
+  
+LnPriceHist <- df %>% ggplot(aes(x = usd_price_ln)) +
+  geom_histogram( color = "red", fill = "navyblue",bins = 50) + theme_tufte() +
+  labs(title = "Logged-Price frequency distribution", x = "Log-Transformed Price",
+       y = "Frequency Count")
 
 #### Sample vs Holdout sets ####
 set.seed(1)
   train_indices <- as.integer(createDataPartition(df$usd_price_ln, p = 0.7, list = FALSE))
   data_train <- df[train_indices, ]
   data_holdout <- df[-train_indices, ]
-  
-#  sapply(data_train,class) == sapply(df,class)
-  
+
 # train control is 5 fold cross validation
   train_control <- trainControl(method = "cv",
                                 number = 5,
@@ -251,50 +274,18 @@ rf_model_2_lev
 
 # evaluate random forests -------------------------------------------------
   
-  results <- resamples(
-    list(
-      model_1  = rf_model_1,
-      model_2  = rf_model_2,
-      model_2_lev  = rf_model_2_lev
-    )
-  )
-  summary(results)
-  
-#  results$values$
-    results$values$`model_1~RMSE`
-  # Turning parameter choice 2
-  result_2 <- matrix(c(mean(results$values$`model_1~RMSE`),
-                       mean(results$values$`model_2~RMSE`)
-  ),
-  nrow=2, ncol=1,
-  dimnames = list(c("Model A", "Model B"),
-                  c(results$metrics[2]))
-  )
-
   
 #------------------ Model Comparison ####
-  final_models <-
-    list("OLS" = ols_model,
-         "LASSO (w/ interactions)" = lasso_model,
-         "CART" = cart_model,
-         "Random forest (smaller model)" = rf_model_1,
-         "Random forest" = rf_model_2
-         ,"Random forest - Level Y var" = rf_model_2_lev
-)
-  
-  results <- resamples(final_models) %>% summary()
-  results # throw out CART & Level RF
   
   final_models <-
     list("OLS" = ols_model,
-         "LASSO (w/ interactions)" = lasso_model,
-#         "CART" = cart_model,
-         "Random forest (smaller model)" = rf_model_1,
-         "Random forest" = rf_model_2
-#         ,"Random forest - Level Y var" = rf_model_2_lev
-    )
+         "LASSO (model w/ interactions)" = lasso_model,
+         "Random forest (smaller)" = rf_model_1,
+         "Random forest" = rf_model_2)
   
   results <- resamples(final_models) %>% summary()
+  
+  
 models <- c("ols_model","lasso_model","rf_model_1","rf_model_2")  
 Predictions <-data.frame(sapply(models[1:4],function(x) {
   tl <- list()
@@ -309,21 +300,21 @@ Predictions <-data.frame(sapply(models[1:4],function(x) {
 
 Rsq <- NULL
 for (i in 1:4) {
-  Rsq[models[i]] <- mean(results[[3]][['Rsquared']][i,1:5])
+  Rsq[models[i]] <- round(mean(results[[3]][['Rsquared']][i,1:5]),3)
 }
 
-SumStatTable <- cbind(models,Rsq,rbindlist(lapply(Predictions, function(x) {
+SumStatTable <- as.data.frame(cbind(Rsq,rbindlist(lapply(Predictions, function(x) {
   tl <- list()
   tl[['MAE']] <- round(MAE(x,data_train$usd_price),3)
   tl[['RMSE']] <- round(RMSE(x, data_train$usd_price),3)
   tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_train$usd_price),3)
   return(tl)
-})))
-
+}))))
+rownames(SumStatTable) <- models
 SumStatTable
 
-#### Final Model Re-Estimation ####
 
+#### Final Model Re-Estimation ####
 train_control <- trainControl(method = "none",verboseIter = FALSE)  
 
 # set tuning for final model
@@ -345,51 +336,6 @@ system.time({
   )
 })
 
-rf_model_final$finalModel$r.squared
-
-# simpler model for model A (1)
-# set tuning for final model
-tune_grid <- expand.grid(
-  .mtry = c(9),
-  .splitrule = "variance",
-  .min.node.size = c(5)
-)
-
-set.seed(1234)
-system.time({
-  rf_model_1final <- train(
-    formula(paste0("usd_price_ln ~ ", paste0(predictors2, collapse = " + "))),
-    data = data_train,
-    method = "ranger",
-    trControl = train_control,
-    tuneGrid = tune_grid,
-    importance = "impurity"
-  )
-})
-
-
-
-#### Summary of RF_1_Final Model ####
-data_holdout_w_prediction <- data_holdout %>%
-  mutate(predicted_price_ln = predict(rf_model_1final, newdata = data_holdout))
-
-data_holdout_w_prediction <- data_holdout_w_prediction %>% mutate(res = predicted_price_ln - usd_price_ln)
-StDev <- sd(data_holdout_w_prediction$res)
-data_holdout_w_prediction$predicted_price <- exp(data_holdout_w_prediction$predicted_price_ln) * exp((StDev^2)/2)
-
-
-Rsq <- rf_model_1final$finalModel$r.squared
-
-SumStatsFinalModelTable1 <- cbind(Rsq,rbindlist(lapply(data_holdout_w_prediction[c("predicted_price")], function(x) {
-  tl <- list()
-  tl[['MAE']] <- round(MAE(x,data_holdout$usd_price),3)
-  tl[['RMSE']] <- round(RMSE(x, data_holdout$usd_price),3)
-  tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_holdout$usd_price),3)
-  return(tl)
-})))
-
-
-
 #### Summary of RF_2_Final Model ####
 data_holdout_w_prediction <- data_holdout %>%
   mutate(predicted_price_ln = predict(rf_model_final, newdata = data_holdout))
@@ -397,11 +343,10 @@ data_holdout_w_prediction <- data_holdout %>%
 data_holdout_w_prediction <- data_holdout_w_prediction %>% mutate(res = predicted_price_ln - usd_price_ln)
 StDev <- sd(data_holdout_w_prediction$res)
 data_holdout_w_prediction$predicted_price <- exp(data_holdout_w_prediction$predicted_price_ln) * exp((StDev^2)/2)
-
-
 Rsq <- rf_model_final$finalModel$r.squared
 
-SumStatsFinalModelTable <- cbind(Rsq,rbindlist(lapply(data_holdout_w_prediction[c("predicted_price")], function(x) {
+SumStatsFinalModelTable <- 
+  cbind(Rsq,rbindlist(lapply(data_holdout_w_prediction[c("predicted_price")], function(x) {
   tl <- list()
   tl[['MAE']] <- round(MAE(x,data_holdout$usd_price),3)
   tl[['RMSE']] <- round(RMSE(x, data_holdout$usd_price),3)
@@ -409,7 +354,7 @@ SumStatsFinalModelTable <- cbind(Rsq,rbindlist(lapply(data_holdout_w_prediction[
   return(tl)
 })))
 
-rbind(SumStatsFinalModelTable1,SumStatsFinalModelTable)
+SumStatsFinalModelTable
 
 
 # MODEL DIAGNOSTICS -------------------------------------------------------
@@ -424,6 +369,7 @@ PredvsAccPlot <- data_holdout_w_prediction %>% ggplot(aes(x = usd_price, y = usd
   labs(title = "Actual versus Predicted Prices",
        x = "Actual Prices", y = "Predicted Prices")
 
+PredvsAccPlot
 
 ######### create nice summary table of heterogeneity
 a <- data_holdout_w_prediction %>%
@@ -473,7 +419,7 @@ result_3 <- rbind(line2, a, line1, c, line3, b, d) %>%
   transform(RMSE = as.numeric(RMSE), `Mean price` = as.numeric(`Mean price`),
             `RMSE/price` = as.numeric(`RMSE/price`))
 
-table(data_holdout$f_neighbourhood_cleansed)
+kable(result_3)
 
 
 # FIGURES FOR FITTED VS ACTUAL OUTCOME VARIABLES #
@@ -526,15 +472,10 @@ group.importance <- function(rf.obj, groups) {
     colnames(var.imp) <- "MeanDecreaseGini"
     return(var.imp)
 }
-
-  
   # variable importance plot
   # 1) full varimp plot, full
   # 2) varimp plot grouped
-  # 3) varimp plot , top 10
-  # 4) varimp plot  w copy, top 10
-  
-rf_model_final$finalModel  
+  # 3) varimp plot , top 20 Amenities
 
   rf_model_final_var_imp <- importance(rf_model_final$finalModel)/1000
   rf_model_final_var_imp_df <-
@@ -615,7 +556,7 @@ rf_model_final$finalModel
   rf_model_final_var_imp_grouped_plot
   
 ##########################################
-  # 3) full varimp plot, top 25 amenities
+  # 3) full varimp plot, top 20 amenities
 ##########################################
   
   

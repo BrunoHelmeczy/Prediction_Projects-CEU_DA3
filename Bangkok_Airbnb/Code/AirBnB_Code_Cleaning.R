@@ -106,6 +106,7 @@ for (i in 1:length(Bangkok$host_verifications)) {
 Bangkok$host_verifications <- n_host_verifications
 Bangkok <- Bangkok %>% rename(n_host_verifications = host_verifications)
 
+
 # 2.3.3) Host Neighborhood 
 # where host comes from might be relevant -> should be factored 
 Bangkok$host_neighbourhood <- factor(trimws(
@@ -116,15 +117,38 @@ Bangkok$host_neighbourhood <- factor(trimws(
 
 Levels <- levels(factor(unlist(Bangkok$host_neighbourhood)))
 DummyTable <- as.data.frame(do.call(rbind, lapply(lapply(Bangkok$host_neighbourhood, factor, Levels), table)))
-colnames(DummyTable) <- gsub("[^[:alnum:]_]","",trimws(colnames(DummyTable)))
+#colnames(DummyTable) <- gsub("[^[:alnum:]_]","",trimws(colnames(DummyTable)))
+
+
+Dummies_w_Many_Falses <- function(DummyVardf, MaxHowManyTrue = 100) {
+  
+  return(lapply(1:length(DummyVardf), function(x) {
+    tl <- list()
+    tl[['Colname']] <- colnames(DummyVardf[c(x)])
+    tl[['False']] <- table(DummyVardf[c(x)])[1]
+    tl[['True']] <- table(DummyVardf[c(x)])[2]
+    return(tl)
+  }) %>% rbindlist() %>% filter(True < MaxHowManyTrue) %>% 
+    arrange(True))
+}
+
 
 hostcities2keep <- Dummies_w_Many_Falses(DummyTable,10000)
 
 # outside top3 > 3% of data / value -> 'Other'
 top3hostcities <- unlist(hostcities2keep[(nrow(hostcities2keep)-2):(nrow(hostcities2keep)),"Colname"])
 
-Bangkok$host_neighbourhood <- ifelse(Bangkok$f_host_neighbourhood %in% top3hostcities ,"Other", top3hostcities)
-table(Bangkok$f_host_neighbourhood)
+names(top3hostcities) <- NULL
+top3hostcities[1:3]
+
+table(Bangkok$host_neighbourhood)
+
+Bangkok$host_neighbourhood <- ifelse(!Bangkok$host_neighbourhood %in% top3hostcities[1:3],
+                                     "Other",ifelse(grepl(top3hostcities[1],Bangkok$host_neighbourhood),
+                                                    top3hostcities[1],
+                                                    ifelse(grepl(top3hostcities[2],Bangkok$host_neighbourhood),
+                                                           top3hostcities[2],top3hostcities[3])))
+
 Bangkok <- Bangkok %>% rename(f_host_neighbourhood = host_neighbourhood)
 
 rm(DummyTable,hostcities2keep)
@@ -371,7 +395,7 @@ Bangkok <- Bangkok %>%
                                          as.Date(first_review ,format="%Y-%m-%d")),
          n_days_since_last = as.numeric(as.Date(calendar_last_scraped,format="%Y-%m-%d") -
                                           as.Date(last_review ,format="%Y-%m-%d"))) %>% 
-  select(-c(calendar_last_scraped,first_review,last_review, host_since))
+  dplyr::select(-c(calendar_last_scraped,first_review,last_review, host_since))
 
 
 colnames(Bangkok)
@@ -416,7 +440,7 @@ CoerceDummiesAdvanced <- function(df_w_Dummies, keywords_Vector) {
     
     #-----------------------------
     # Finding Columns
-    ColMatchestest <- df_w_Dummies %>% select(matches(keywords_Vector[j])) %>% colnames()
+    ColMatchestest <- df_w_Dummies %>% dplyr::select(matches(keywords_Vector[j])) %>% colnames()
     NewColName[j] <- unlist(str_split(keywords_Vector[j],"\\|"))[1]
     
     #---------------------------------  
@@ -496,17 +520,6 @@ DupsRemoved <- CoerceDummyVarColumns(PostKeywords,Dups,SplitStrings = F)
 colnames(DupsRemoved) <- gsub("[^[:alnum:]_]","_",colnames(DupsRemoved))
 
 # 2.10.4) Find & Remove Dummy Cols w VERY few Trues -> say < 1% TRUE = 1
-Dummies_w_Many_Falses <- function(DummyVardf, MaxHowManyTrue = 100) {
-  
-  return(lapply(1:length(DummyVardf), function(x) {
-    tl <- list()
-    tl[['Colname']] <- colnames(DummyVardf[c(x)])
-    tl[['False']] <- table(DummyVardf[c(x)])[1]
-    tl[['True']] <- table(DummyVardf[c(x)])[2]
-    return(tl)
-  }) %>% rbindlist() %>% filter(True < MaxHowManyTrue) %>% 
-    arrange(True))
-}
 ManyFalses <- Dummies_w_Many_Falses(DupsRemoved)
 DupsRemoved[ManyFalses$Colname] <- NULL
 
@@ -517,7 +530,7 @@ Bangkok$amenities <- NULL
 
 
 # Start all varnames w l_,d_,n_,flag_,p_,usd_
-oldnames <- Bangkok %>% select(-matches("^l_.*|^d_.*|^n_.*|^flag_.*|^f_.*|^p_.*|^usd_.*")) %>% colnames()
+oldnames <- Bangkok %>% dplyr::select(-matches("^l_.*|^d_.*|^n_.*|^flag_.*|^f_.*|^p_.*|^usd_.*")) %>% colnames()
 torename <- match(oldnames,colnames(Bangkok))
 
 colnames(Bangkok)[torename] <- paste0("d_",oldnames)
@@ -544,17 +557,15 @@ rownames(VarDescribe) <- NULL
 
 #### 2.1) Price in USD ####
 # 27 Obs.s > 1000 -> delete
-df <- df %>% filter(usd_price <= 1000)
+df <- df %>% filter(usd_price <= 500)
 df[c("usd_price")] %>% ggplot(aes(x = usd_price)) + 
   geom_histogram()
 # Skewed as hell -> log transform
 df <- df %>% mutate(usd_price_ln = log(usd_price))
 
 #### 2.2) Numeric Vars ####
-
-
-sapply(df %>% select(matches("^n_",colnames(df))) %>% colnames(),function(x) {
-  hist(df[x])#,main = paste("Histogram of" , x)) 
+sapply(df %>% dplyr::select(matches("^n_",colnames(df))) %>% colnames(),function(x) {
+  hist(df[x])
 })
 
 # To ln: 
@@ -573,7 +584,7 @@ df <- df %>% mutate(
 # To Throw out: 
 #   n_max_nights, 
 #   n_max_nights_avg
-df <- df %>% select(-c(n_max_nights,n_max_nights_avg))
+df <- df %>% dplyr::select(-c(n_max_nights,n_max_nights_avg))
 
 
 # To Group:
@@ -629,9 +640,9 @@ df <- df %>% mutate(
 
 # Most NAs:  p_host_response_rate,f_host_neighbourhood,n_days_since_last_ln,
 #  n_days_since_last, n_days_since_1st_ln, n_days_since_1st
-# p_host_response_rate, f_host_neighbourhood -> DROP
+# p_host_response_rate -> DROP
 
-drop <- c("p_host_response_rate", "f_host_neighbourhood")
+drop <- c("p_host_response_rate")
 df[drop] <- NULL
 
 # days_since -> No Value most likely implies no hosting yet -> 
@@ -658,7 +669,7 @@ df <- df %>% mutate(
                        labels = c(1,3,max(df$n_beds,na.rm = T)), right = F),
   f_bedrooms     = cut(df$n_bedrooms, c(0,1,2,max(df$n_bedrooms,na.rm = T)), labels = c(1,2,3), right = T),
   f_bathrooms    = cut(df$n_bathrooms, c(0,1.1,2.1,max(df$n_bathrooms, na.rm=T)+1), labels=c(1,2,3), right = F)) %>% 
-  select(-p_host_acceptance_rate)
+  dplyr::select(-p_host_acceptance_rate)
 
 
 
