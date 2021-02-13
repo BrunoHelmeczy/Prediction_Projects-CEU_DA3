@@ -48,7 +48,7 @@ df[,which(ColsUniques$distinct == 1)] <- NULL
 
 ### Executive Summary 
 
-This report looks to find the best "Hotel Deal" in Vienna, during holidays in December 2018. I look to answer "Which 5 hotels offer the best 'Deal' during 2018 year-end holiday period ?" by applying a Linear Regression, Classification & Regression Tree, & a Random Forest model, on data obtained from Trip Advisor. I define the 'best deals' as those observations with largest negative residuals vs their expected price according to my selected model. 
+This report looks to find the 5 best "Deals" in Vienna, during holidays in December 2017. I look to answer "What are the 5 best offers in town during 2017 year-end holiday period ?" by applying a Linear Regression, a Classification & Regression Tree, & a Random Forest model, on data obtained from Trip Advisor. I define 'best deals' as those observations with largest negative residuals vs their expected price according to my selected model. I found the Random Forest model to vastly outperform both the OLS & CART model specification, reaching a 68.3% Adjusted R-squared value, 16.2 euros Mean Absolute Error & 24.5 euros RMSE. Finally, the model found 5 deals that represent bargains between 44-55 euros, in addition to being diverse in terms of pricing, stay length, star rating, distance from the centre & accommodation type.
 
 **Introduction**
 
@@ -56,7 +56,7 @@ Vienna is a popular destination during the (pre)-christmas period, famous for it
 
 **Data Cleaning, Association Patterns, & Variable Transformations**
 
-**Cleaning:** My raw data comprises the hotels europe dataset available by clicking [here]("https://osf.io/r6uqb/"). This dataset includes hotel prices & various other features from 46 european cities on 10 different dates, & is scraped from a price comparison website. I filtered the dataset for 2018, December, holiay noted period, netting 708 observations. Note that I included both 1-night & 4-night deals, as they reporesent different offerings, possibly with different value for money, even if offered by the same hotel.  Furthermore, it is a realistic scenario for traveller to decide on the holidays' length, based on the deals that they would find most to their liking. To avoid comparing apples & oranges however, I calculated the price per night for every deal, which represents my target variable. I cleaned the data 1st by Converting distance strings, & review ratings to numeric vectors; then 2nd by Imputing missing Review Scores for a hotel with the datasets' median & adding flag variable columns to note hotels without reviews. With that, I am ready to observe variables' distributions.
+**Cleaning:** My raw data comprises the hotels europe dataset available by clicking [here](https://osf.io/r6uqb/). This dataset includes hotel prices & various other features from 46 european cities on 10 different dates, & is scraped from a price comparison website. I filtered the dataset for a 2017, December, holiay noted period, for deals under 400 euros per night, netting 676 observations. Note that I included both 1-night & 4-night deals, as they reporesent different offerings, possibly with different value for money, even if offered by the same hotel.  Furthermore, it is a realistic scenario for travellers to decide on the holidays' length, based on the deals that they would find most to their liking. To avoid comparing apples & oranges however, I calculated the price per night for every deal, which represents my target variable. I cleaned the data 1st by Converting distance strings, & review ratings to numeric vectors; 2nd by Imputing missing Review Scores for a hotel with the datasets' median, & adding flag variable columns to note hotels without reviews; & 3rd by converting accommodation type, offer type & neighbourhood variables to a series of dummy variables, resulting in 44 predictor variables used.
 
 
 ```{r cleaning, message = F, warning=F, echo = F, eval = T }
@@ -107,7 +107,7 @@ df <- df %>% mutate(
 df <- df %>% filter(pricepernight <= 400)
 ```
 
-**Distributions & Association Patterns:** 
+**Distributions & Association Patterns:** Please the most important quantitative variables' summary statistics below, as well as all variables' histograms in the appendices. One may observe skewness with long right tails for prices per night, both distance variables, & the Nr. of reviews posted on Trip Advisor, while for the alternative rating measure skewness with long left tail is visible. Based on the summary statistics & histograms I changed the target variable to its' log-form. Also due to observed summary statistics, histograms & association patterns, I log-transformed both distance measures & review counts, while taking the exponent of guest reviews. Finally, I pivoted neighbourhoods, offer categories, & accommodation type variables to dummy tables.
 
 ```{r Hists & Summtable, warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
 
@@ -150,6 +150,8 @@ table %>% knitr::kable()
 ```
 
 ### Modelling 
+
+**Model Comparisons:** With cleaning & transformations out of the way, 3 models were specified, each using the same group of predictor variables & predicting the natural logarithm of prices per night. Given the goal of this analysis is to find best deals in sample, no holdout data was sampled, however I performed 10-fold cross-validation. Please see the models' resulting summary statistics below, having already transformed log-price predictions to level-forms. One can observe the Regression Tree to beat the Multiple-Linear Regression model in terms of Mean absolute error (24.5 vs 30.9) & Root Mean Square error (35.3 vs 43.7), despite boasting slightly lower Adjusted R-squared (50.5% vs52%). The Random Forest model however, using 7 variables at a time & a minimum node size of 5, vastly outperforms both, boasting ca. 33% higher adjusted R-squared (66.8% vs 50.5%), more then 8 euros less MAE (16.3 vs 24.5) & more then 10 euros less RMSE (24.8 vs 35.3). As such, the Random Forest is the clear winner & therefore is my chosen final model.
 
 ```{r Scatters & Boxes, warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
 
@@ -351,7 +353,7 @@ SumStatTable %>% kable()
 
 ```
 
-**Final Model:**
+**Final Model:** Please see the final models' summary statistics below, re-estimated on the complete dataset. Fitted to the complete dataset, Adjusted R-squared further improved, to 68.3%, with marginal improvements in both MAE & RMSE. Importantly the Root Mean Square Error only represents 16.6% of the average daily room price. With that, the model is ready to find the 5 best deals in town for what presumably is the christmas period.
 
 
 ```{r , , warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
@@ -406,7 +408,8 @@ SumStatsFinalModelTable %>% kable()
 ```
 
 
-**The 5 Best Deals:**
+**The 5 Best Deals:** Please see the 5 best deals according to the final model, as well as 5 hotels provided as best deals' according to the reference model for this course. Interestingly, the 5 best deals seem quite diverse in nature & price, incorporating 2 hotels in Innere Stadt of different star rating for 1 night, 1 apartment just over a mile from the centre that is quite budget-friendly, & 2 apartments further from the centre, however 1 of them for 4 nights. Thus, if one sees this analysis' purpose to be finding a diverse variety of alternatives that represent good value-for-money, then the final Random Forest model achieves that purpose, each deal offering a bargain between 44-55 euros according to our model. Meanwhile, the deals offered by the 5 hotels provided as best deals' according to a reference model only represented bargains of 11-18 euros, 1 of the even being over-priced by 28 euros according to the final model. 
+
 
 ```{r , , warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
 #### Residual Analysis 2 Find BEST DEALS ----
@@ -439,7 +442,7 @@ Deals %>% kable()
 
 ### Conclusion / Summary
 
-This report investigated the best hotel deals available in Vienna, during the 2017 December holiday period, using an Ordinary Least Squares, a Classification & Regression Tree, & a Random Forest model. 
+This report investigated the best hotel deals available in Vienna, during the 2017 December holiday period, using data originally scraped from a price comparison website, & also considering apartments, not just hotels, while sticking to a daily budget of max 400 euros, while being flexible about staying for 1, or 4 nights. After comparing performance of an Ordinary Least Squares, a Classification & Regression Tree, & a Random Forest model, I found Random Forest to vastly outperform OLS & CART. Meanwhile, re-estimated on the whole dataset, the final model improved slightly further, reaching adjusted R-Squared of 68.3%, mean absolute error of 16.2 euros, & root mean squared error of 24.45 euros. Using this model, I found the 5 'best deals' for the period by looking at largest negative residuals, each deviating between 45-55 euros from their respective predicted prices. Interestingly, the deals found were quite diverse in both nature & pricing, while the 5 best deals according to the reference model provided for this course represented bargains of about 11-18 euros.
 
 
 
