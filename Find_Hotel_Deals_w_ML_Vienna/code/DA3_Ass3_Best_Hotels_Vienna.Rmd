@@ -1,0 +1,51 @@
+---
+title: "Finding Hotel Deals in Vienna using Machine Learning"
+author: "Bruno Helmeczy"
+date: "12/02/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary 
+
+This report looks to find the best "Hotel Deal" in Vienna, during holidays in December 2018. I look to answer "Which 5 hotels offer the best 'Deal' during 2018 year-end holiday period ?" by applying a Linear Regression, Classification & Regression Tree, & a Random Forest model, on data obtained from Trip Advisor. I define the 'best deals' as those observations with largest negative residuals vs their expected price according to my selected model. 
+
+### Introduction
+
+Vienna is a popular destination during the (pre)-christmas period, famous for its christmas market, & beautiful scenery, glamorous reminders of a glorious age called the Austria-Hungarian Monarchy. As such a conveniently distanced, & suitable destination for couples' & families' from neighbouring countries, to relax. I look to answer "Which 5 hotels offer the best 'Deal' during 2018 year-end holiday period ?" by applying a Linear Regression, Classification & Regression Tree, & a Random Forest model, on data obtained from Trip Advisor. I define 'Best Deal' as the hotel offering the most-value for money. In this context, after modelling hotels' prices based on variables related to hotel quality, distance from the city centre & guest reviews, I define the 'best deals' as those observations with largest negative residuals vs their expected price according to my selected model.  
+
+**Data Cleaning, Association Patterns, & Variable Transformations**
+
+**Cleaning:** My raw data comprises the hotel europe dataset available by clicking [here]("https://osf.io/r6uqb/"). This dataset includes hotel prices & various other features from 46 european cities on 10 different dates, & is scraped from a price comparison website. I filtered the dataset for 2018, December, holiay noted period, netting 708 observations. Note that I included both 1-night & 4-night deals, as they reporesent different offerings, possibly with different value for money, even if offered by the same hotel.  Furthermore, it is a realistic scenario for traveller to decide on the holidays' length, based on the deals that they would find most to their liking. To avoid comparing apples & oranges however, I calculated the price per night for every deal, which represents my target variable. I cleaned the data 1st by Converting distance strings, & review ratings to numeric vectors; then 2nd by Imputing missing Review Scores for a hotel with the datasets' **mean / median** & adding flag variable columns to note hotels without reviews. With that, I am ready to observe target-, & independent variables' distributions.
+
+
+
+
+
+After a number of cleaning steps, e.g. converting distance strings, & review ratings to numeric vectors; handling missing values in review-related variables,
+
+
+
+
+
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
