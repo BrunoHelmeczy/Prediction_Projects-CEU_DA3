@@ -5,44 +5,460 @@ date: "12/02/2021"
 output: pdf_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, , message = F, warning = F, echo = F, eval = T}
+
+# PACKAGES
+library(caret)
+library(dplyr)
+library(readr)
+library(data.table)
+library(ggthemes)
+library(ggplot2)
+library(ggridges)
+library(moments)
+library(rattle)
+library(knitr)
+library(gridExtra)
+#library(huxtable)
+library(tidyverse)
+
+
+# Load Data
+FileSource <- "https://raw.githubusercontent.com/BrunoHelmeczy/Prediction_Projects-CEU_DA3/main/Find_Hotel_Deals_w_ML_Vienna/data/raw/"
+
+df <- read_csv(paste0(FileSource,"hotelbookingdata.csv"))
+
+# filter Time Period & Location -> Christmas Time in Vienna
+df <- df[df$year == 2017 & df$month == 12 & df$holiday == 1,]
+df <- df[df$s_city == "Vienna",]
+
+# Check for singular value columns -> Remove
+ColsUniques <- rbindlist(lapply(1:length(df), function(x) {
+  tl <- list()
+  tl[['name']] <- colnames(df)[x]
+  tl[['distinct']] <- nrow(unique(df[,x]))
+  return(tl)
+}))
+
+df[,which(ColsUniques$distinct == 1)] <- NULL
+
+
+
 ```
 
-## Executive Summary 
+### Executive Summary 
 
 This report looks to find the best "Hotel Deal" in Vienna, during holidays in December 2018. I look to answer "Which 5 hotels offer the best 'Deal' during 2018 year-end holiday period ?" by applying a Linear Regression, Classification & Regression Tree, & a Random Forest model, on data obtained from Trip Advisor. I define the 'best deals' as those observations with largest negative residuals vs their expected price according to my selected model. 
 
-### Introduction
+**Introduction**
 
 Vienna is a popular destination during the (pre)-christmas period, famous for its christmas market, & beautiful scenery, glamorous reminders of a glorious age called the Austria-Hungarian Monarchy. As such a conveniently distanced, & suitable destination for couples' & families' from neighbouring countries, to relax. I look to answer "Which 5 hotels offer the best 'Deal' during 2018 year-end holiday period ?" by applying a Linear Regression, Classification & Regression Tree, & a Random Forest model, on data obtained from Trip Advisor. I define 'Best Deal' as the hotel offering the most-value for money. In this context, after modelling hotels' prices based on variables related to hotel quality, distance from the city centre & guest reviews, I define the 'best deals' as those observations with largest negative residuals vs their expected price according to my selected model.  
 
 **Data Cleaning, Association Patterns, & Variable Transformations**
 
-**Cleaning:** My raw data comprises the hotel europe dataset available by clicking [here]("https://osf.io/r6uqb/"). This dataset includes hotel prices & various other features from 46 european cities on 10 different dates, & is scraped from a price comparison website. I filtered the dataset for 2018, December, holiay noted period, netting 708 observations. Note that I included both 1-night & 4-night deals, as they reporesent different offerings, possibly with different value for money, even if offered by the same hotel.  Furthermore, it is a realistic scenario for traveller to decide on the holidays' length, based on the deals that they would find most to their liking. To avoid comparing apples & oranges however, I calculated the price per night for every deal, which represents my target variable. I cleaned the data 1st by Converting distance strings, & review ratings to numeric vectors; then 2nd by Imputing missing Review Scores for a hotel with the datasets' **mean / median** & adding flag variable columns to note hotels without reviews. With that, I am ready to observe target-, & independent variables' distributions.
+**Cleaning:** My raw data comprises the hotels europe dataset available by clicking [here]("https://osf.io/r6uqb/"). This dataset includes hotel prices & various other features from 46 european cities on 10 different dates, & is scraped from a price comparison website. I filtered the dataset for 2018, December, holiay noted period, netting 708 observations. Note that I included both 1-night & 4-night deals, as they reporesent different offerings, possibly with different value for money, even if offered by the same hotel.  Furthermore, it is a realistic scenario for traveller to decide on the holidays' length, based on the deals that they would find most to their liking. To avoid comparing apples & oranges however, I calculated the price per night for every deal, which represents my target variable. I cleaned the data 1st by Converting distance strings, & review ratings to numeric vectors; then 2nd by Imputing missing Review Scores for a hotel with the datasets' median & adding flag variable columns to note hotels without reviews. With that, I am ready to observe variables' distributions.
 
 
+```{r cleaning, message = F, warning=F, echo = F, eval = T }
+
+# From hotels-vienna_cleaning.R -------------
+  # 1) Distance to centre -> String -> Numeric 
+  # 2) Accomtype -> remove: "_ACCOM_TYPE@"
+  # 3) Ratings (guestreviewrating) -> remove: "/5" -> String -> Numeric
+  # 4) Check Stars -> is OKAY
+  # +1) Nr. Nights -> 
+
+df <- df %>% mutate(
+  center1distance    = as.numeric(gsub("[^0-9\\.]","",center1distance)),     # 1)
+  center2distance    = as.numeric(gsub("[^0-9\\.]","",center2distance)),     # 1)
+  accommodationtype  = gsub("_ACCOM_TYPE@","",accommodationtype),            # 2)
+  guestreviewsrating = as.numeric(trimws(gsub("/5","",guestreviewsrating))), # 3)
+  Nrnights           = as.numeric(gsub("[^0-9\\]","",price_night))) %>%      # +1)
+  mutate(
+  pricepernight      = ifelse(Nrnights > 1, round(price/Nrnights,0) ,price))
+
+df$price_night <- NULL
+
+# ++1) Columns with NAs -> reviews -> zero review count == no rating
+#df %>% select(matches("rating")) %>% mutate(NAs = rowSums(is.na(.))) %>% 
+#  group_by(NAs) %>% dplyr::summarize(Count = n())
+
+# Zero Review count = NA -> Impute 0
+# Review scores -> No reviews -> Mean / Median + Flagging variables
+df <- df %>% mutate(
+  rating2_ta_reviewcount = ifelse(is.na(rating2_ta_reviewcount),0,rating2_ta_reviewcount),
+  rating_reviewcount = ifelse(is.na(rating_reviewcount), 0,rating_reviewcount ))
+
+df <- df %>% mutate(
+  rating2_ta_flag = ifelse(is.na(rating2_ta),1,0),
+  guestreviewsrating_flag = ifelse(is.na(guestreviewsrating),1,0)) %>% 
+  mutate(rating2_ta = ifelse(is.na(rating2_ta),median(rating2_ta,na.rm = T),rating2_ta),
+         guestreviewsrating = ifelse(is.na(guestreviewsrating),
+                                     median(guestreviewsrating, na.rm = T),
+                                     guestreviewsrating))
 
 
+# Remove Extreme Values from pricepernight - 97.6% obs < 500 -> good enough
+#df %>% mutate(price100s = floor(pricepernight/100)*100) %>% 
+#  group_by(price100s) %>% 
+#  dplyr::summarize(count = n()) %>% 
+#  mutate(runningtotal = cumsum(count)/sum(count))
 
-After a number of cleaning steps, e.g. converting distance strings, & review ratings to numeric vectors; handling missing values in review-related variables,
-
-
-
-
-
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+df <- df %>% filter(pricepernight <= 400)
 ```
 
-## Including Plots
+**Distributions & Association Patterns:** 
 
-You can also embed plots, for example:
+```{r Hists & Summtable, warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+
+# Plot Variable Distributions & Frequency tables ----
+Hists <- lapply(df %>% select(-matches("id")) %>% colnames(),function(x) {
+  if(is.numeric(df[,x][[1]]) ) {
+    df %>% ggplot(aes_string(x = x)) + 
+      geom_histogram( color = "red", fill = "blue") + theme_tufte() + 
+      labs(title = paste0("Vienna Hotels ",x," Distribution")) 
+  } else if (is.character(df[,x][[1]])) {
+    df %>% ggplot(aes_string(x = x ) ) + 
+      geom_bar(color = "red", fill = "blue") + coord_flip() + theme_tufte() + 
+      labs(title = paste0("Vienna Hotels ",x," Distribution"))  
+  }
+})
+
+# Summary table -----
+summstats <- c("min","median","mean","max","sd","skewness")
+NrCols <- c("price","pricepernight","Nrnights","starrating","center1distance","center2distance",
+             "rating2_ta","rating2_ta_reviewcount","guestreviewsrating")
+
+summtable <- list()
+table <- data.frame()
+for (i in summstats) {
+  summtable[[i]] <- cbind(mapply( eval(parse(text = i)), df[,NrCols]))
+  if (length(table) == 0) {
+    table <- cbind(summtable[[i]])
+  } else {table <- cbind(table, summtable[[i]])}
+}
+colnames(table) <- summstats
+table <- as.data.frame(round(table,1))
+Vars <- rownames(table)
+rownames(table) <- NULL
+table <- as.data.frame(cbind(Vars,table))
+
+table %>% knitr::kable()
+
+
+
+```
+
+### Modelling 
+
+```{r Scatters & Boxes, warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+
+# Check 4 Transformations & Dummy Feature Engineering ->
+  # Log: 
+    # Pricepernight (y) 
+    # rating2_ta_reviewcount
+    # center2distance
+    # center1distance
+    # rating_reviewcount
+  # Exp: 
+    # guestreviewsrating 
+  # Dummy tables: 
+    # Accommodationtype
+    # Neighbourhood
+
+df <- df %>% mutate(
+  pricepernight_ln          = log(pricepernight),
+  rating2_ta_reviewcount_ln = log(rating2_ta_reviewcount+1),
+  center2distance_ln        = log(center2distance+1),
+  center1distance_ln        = log(center1distance+1),
+  rating_reviewcount_ln     = log(rating_reviewcount+1),
+  guestreviewsrating_exp    = exp(guestreviewsrating))
+
+
+Boxes_Scatters <- lapply(df %>% select(-matches("id|pricepernight|flag")) %>% 
+                           select(-price) %>% colnames(),function(x) {
+
+  if (is.character(df[,x][[1]]) | x %in% c("starrating", "rating2_ta","Nrnights")) {
+    plot <- df %>% ggplot()  + 
+      geom_density_ridges(aes_string(y = x, x = "pricepernight_ln", group = x),color = "red", fill = "blue") +
+      theme_tufte() + 
+      labs(title = paste0("Vienna Hotels log-Price Distr. by ",x))  
+    
+  } else if(is.numeric(df[,x][[1]]) ) {
+    plot <- df %>% ggplot(aes_string(x = x,y = "pricepernight_ln")) +  theme_tufte() + 
+      geom_smooth(method="loess", color="black", size = 1) + 
+      labs(title = paste0("Vienna Hotels log-Price Distr. by ",x)) 
+    if (length(unique(df[,x][[1]])) == 2) {
+      plot <- plot + geom_point( color = "red", shape = 3) 
+
+    } else {
+      plot <- plot + geom_point( color = "blue", ) 
+    }
+  }  
+})
+
+
+# Dummy Tables 4: offer_cat, accommodationtype, neighbourhood ----
+  # Get vector of raw factor levels & Dataframe of dummies if in level 
+
+# Offer Category
+Levels <- levels(factor(unlist(df$offer_cat)))
+Dummies1 <- as.data.frame(do.call(rbind, lapply(lapply(df$offer_cat, factor, Levels), table)))
+colnames(Dummies1) <- paste0("p",Dummies1 %>% colnames())
+
+# Accommodation Type
+Levels <- levels(factor(unlist(df$accommodationtype)))
+Dummies2 <- as.data.frame(do.call(rbind, lapply(lapply(df$accommodationtype, factor, Levels), table)))
+
+# Neighbourhood
+Levels <- levels(factor(unlist(df$neighbourhood)))
+Dummies3 <- as.data.frame(do.call(rbind, lapply(lapply(df$neighbourhood, factor, Levels), table)))
+
+# City Actual
+Levels <- levels(factor(unlist(df$city_actual)))
+Dummies4 <- as.data.frame(do.call(rbind, lapply(lapply(df$city_actual, factor, Levels), table)))
+colnames(Dummies4) <- paste0("city_",colnames(Dummies4))
+  #summary(Dummies4) -> 97% writes Vienna -> drop, no use
+
+df <- cbind(df,Dummies1,Dummies2,Dummies3) %>% 
+  select(-c(city_actual,offer_cat,`p0% no offer`))
+
+# Var name cleaning ------
+colnames(df) <- gsub("+","",
+                     gsub("%","",
+                          gsub("17._","",
+                               gsub("-","_",
+                                    gsub(" ","_",df %>% colnames())))))
+
+colnames(df)[27] <- "p75_offer"
+df$p75_offer <- NULL
+  # 75%+ offers = 0.2% of observations -> Model returns NA coeffs due to singularity
+  # Same for Vacation_home_Condo -> 0.2%
+df$Vacation_home_Condo <- NULL
+
+df <- df %>% rename(
+  c1dist_ln = center1distance_ln,
+  c2dist_ln = center2distance_ln
+) %>% select(-price)
+
+
+```
+
+
+
+
+```{r models , , warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+
+# Model Specifications -------------
+predictors <- df %>% 
+  select(-matches("id|pricepernight|accommodationtype|neighbourhood|rating2_ta_reviewcount$|center2distance$|center1distance$|rating_reviewcount$|guestreviewsrating$")) %>% colnames()
+
+# Sample vs Holdout -> No holdout -> In sample prediction
+  # 10-fold CV, insted of 5 though -> not soooo many observations
+#nrow(df)
+
+# train control is 5 fold cross validation
+train_control <- trainControl(method = "cv",
+                              number = 10,
+                              verboseIter = FALSE)  
+
+#formula(paste0("pricepernight_ln ~ ", paste0(predictors, collapse = " + ")))
+
+#### OLS ####
+set.seed(1234)
+  ols_model <- train(
+    formula(paste0("pricepernight_ln ~ ", paste0(predictors, collapse = " + "))),
+    data = df,
+    method = "lm",
+    trControl = train_control
+  )
+
+ols_model_coeffs <-  ols_model$finalModel$coefficients
+ols_model_coeffs_df <- data.frame(
+  "variable" = names(ols_model_coeffs),
+  "ols_coefficient" = ols_model_coeffs
+) %>%
+  mutate(variable = gsub("`","",variable))
+
+#### CART ####
+set.seed(1234)
+  cart_model <- train(
+    formula(paste0("pricepernight_ln ~ ", paste0(predictors, collapse = " + "))),
+    data = df,
+    method = "rpart",
+    trControl = train_control,
+    tuneGrid= expand.grid(cp = 0.001))
+
+#### Random Forest ####
+
+# set tuning
+tune_grid <- expand.grid(
+  .mtry = c( 5, 6, 7 ),
+  .splitrule = "variance",
+  .min.node.size = c(5, 10, 15)
+)
+
+set.seed(1234)
+  rf_model_1 <- train(
+    formula(paste0("pricepernight_ln ~ ", paste0(predictors, collapse = " + "))),
+    data = df,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity"
+  )
+
+#------------------ Model Comparison ####
+
+final_models <-
+  list("OLS" = ols_model,
+       "CART" = cart_model,
+       "Random_forest" = rf_model_1)
+
+  
+results <- resamples(final_models) %>% summary()
+
+models <- c("ols_model","cart_model","rf_model_1")  
+Predictions <-data.frame(sapply(models,function(x) {
+  tl <- list()
+  model <- eval(parse(text = x))
+  tl[[x]] <- predict(model,newdata = df)
+  res <- tl[[x]] - df$pricepernight_ln
+  StDev <- sd(res)
+  tl[[x]] <- exp(tl[[x]]) * exp((StDev^2)/2)
+  
+  return(tl)
+}))
+
+Rsq <- NULL
+for (i in 1:3) {
+  Rsq[models[i]] <- round(mean(results[[3]][['Rsquared']][i,1:5]),3)
+}
+
+
+SumStatTable <- as.data.frame(cbind(Rsq,rbindlist(lapply(Predictions, function(x) {
+  tl <- list()
+  tl[['MAE']] <- round(MAE(x,df$pricepernight),3)
+  tl[['RMSE']] <- round(RMSE(x, df$pricepernight),3)
+  tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(df$pricepernight),3)
+  return(tl)
+}))))
+rownames(SumStatTable) <- names(final_models)
+
+SumStatTable %>% kable()
+  # Model Choice : Random Forest -> mtry = 7 , Min.NodeSize = 5
+
+
+```
+
+**Final Model:**
+
+
+```{r , , warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+
+#### Final Model Re-Estimation ####
+train_control <- trainControl(method = "none",verboseIter = FALSE)  
+
+# set tuning for final model
+tune_grid <- expand.grid(
+  .mtry = c(7),
+  .splitrule = "variance",
+  .min.node.size = c(5)
+)
+
+set.seed(1234)
+  rf_model_final <- train(
+    formula(paste0("pricepernight_ln", paste0(" ~ ",paste0(predictors, collapse = " + ")))),
+    data = df,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity"
+  )
+
+# rf_model_final$finalModel
+# summary(rf_model_final)
+
+#### Summary of RF_2_Final Model ####
+df <- df %>%
+  mutate(predicted_price_ln = predict(rf_model_final, newdata = df))
+
+df <- df %>% mutate(res = predicted_price_ln - pricepernight_ln)
+StDev <- sd(df$res)
+df$predicted_price <- exp(df$predicted_price_ln) * exp((StDev^2)/2)
+Rsq <- round(rf_model_final$finalModel$r.squared,3)
+
+SumStatsFinalModelTable <- 
+  cbind(Rsq,rbindlist(lapply(df[c("predicted_price")], function(x) {
+    tl <- list()
+    tl[['MAE']] <- round(MAE(x,df$pricepernight),3)
+    tl[['RMSE']] <- round(RMSE(x, df$pricepernight),3)
+    tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(df$pricepernight),3)
+    return(tl)
+  })))
+
+modelname <- "RF Final Model"
+SumStatsFinalModelTable <- cbind(modelname,SumStatsFinalModelTable)
+
+SumStatsFinalModelTable %>% kable()
+
+
+```
+
+
+**The 5 Best Deals:**
+
+```{r , , warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+#### Residual Analysis 2 Find BEST DEALS ----
+  # i.e. Largest Negative residuals
+    # largest as in ? Percent / Money saved / total money saved
+      # Money saved / day
+df$res <- round(df$pricepernight - df$predicted_price,1)  
+
+# Characterize best deal hotels
+  # Hotel id, Star rating, Pricepernight, res, Nrnights,
+    # rating2_ta, exp(rating2_ta_reviewcount_ln)-1, guestreviewsrating_exp,
+    # +1s: neighbourhood, distance to centre
+
+# Hotels ranked by Best Deals according to our model
+Deals <- df %>% select(hotel_id,starrating,pricepernight, res,Nrnights,
+                       accommodationtype,neighbourhood, center1distance,
+                       rating2_ta,rating2_ta_reviewcount) %>%
+  arrange(res)
+
+Deals <- rbind(Deals[c(1:5),],
+               Deals[Deals$hotel_id %in% c(21912, 21975, 22344, 22080, 22184),])
+
+names <- c("Hotel_id","Stars","Avg.Price",
+           "Resid.","Nights","Type",
+           "Where?","Miles fr Center","TA_Rating","Nr.Ratings")
+colnames(Deals) <- names
+Deals %>% kable()
+
+```
+
+### Conclusion / Summary
+
+This report investigated the best hotel deals available in Vienna, during the 2017 December holiday period, using an Ordinary Least Squares, a Classification & Regression Tree, & a Random Forest model. 
+
+
+
+
+# Appendices
+
+## 1) Variable Histograms
+
+```{r Hists , warning = F, message = F, echo = F, results= 'asis',  fig.height=2, fig.width=3}
+Hists
+```
+
+## 2) Scatterplot Associations & Ridge Distributions
+
+```{r Boxes & Scatters, warning = F, message = F, echo = F, results= 'asis',  fig.height=2, fig.width=3}
+Boxes_Scatters
+```
+
+
 
 ```{r pressure, echo=FALSE}
 plot(pressure)

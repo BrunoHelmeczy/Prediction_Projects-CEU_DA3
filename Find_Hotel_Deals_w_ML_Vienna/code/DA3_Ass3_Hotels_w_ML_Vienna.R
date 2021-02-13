@@ -24,7 +24,7 @@ df <- read_csv(paste0(data_in,"hotelbookingdata.csv"))
 df <- df[df$year == 2017 & df$month == 12 & df$holiday == 1,]
 df <- df[df$s_city == "Vienna",]
 
-# Check for unique value columns -> Remove
+# Check for singular value columns -> Remove
 ColsUniques <- rbindlist(lapply(1:length(df), function(x) {
   tl <- list()
   tl[['name']] <- colnames(df)[x]
@@ -75,12 +75,14 @@ df <- df %>% mutate(
 
 
 # Remove Extreme Values from pricepernight - 97.6% obs < 500 -> good enough
-df %>% mutate(price100s = floor(pricepernight/100)*100) %>% 
-  group_by(price100s) %>% 
-  summarize(count = n()) %>% 
-  mutate(runningtotal = cumsum(count)/sum(count))
+price50s <- df %>% mutate(price50s = floor(pricepernight/50)*50) %>% 
+  group_by(price50s) %>% 
+  dplyr::summarize(count = n()) %>% 
+  mutate(runningtotal = cumsum(count)/sum(count)) %>% 
+  arrange(desc(price50s))
 
-df <- df %>% filter(pricepernight <= 500)
+
+df <- df %>% filter(pricepernight <= 400)
 
 # Plot Variable Distributions & Frequency tables ----
 Hists <- lapply(df %>% select(-matches("id")) %>% colnames(),function(x) {
@@ -110,9 +112,11 @@ for (i in summstats) {
 }
 colnames(table) <- summstats
 table <- round(table,1)
-table
+Vars <- rownames(table)
+rownames(table) <- NULL
+table <- as.data.frame(cbind(Vars,table))
 
-# Check 4 Transformations & Dummy Feature Engineering ->
+# Check 4 Transformations & Dummy Feature Engineering -----
   # Log: 
     # Pricepernight (y) 
     # rating2_ta_reviewcount
@@ -127,12 +131,12 @@ table
   
 # EDA Avg Price by Accommodation type
 df %>% group_by(accommodationtype) %>% 
-  summarize(AvgPrice = mean(pricepernight),
+  dplyr::summarize(AvgPrice = mean(pricepernight),
             NrObs = n()) %>% 
   arrange(desc(AvgPrice))
 
 df %>% group_by(neighbourhood) %>% 
-  summarize(count = n()) %>% 
+  dplyr::summarize(count = n()) %>% 
   arrange(desc(count)) %>% 
   mutate(runningtotal = cumsum(count),
          percent = count/sum(count),
@@ -172,7 +176,7 @@ Boxes_Scatters <- lapply(df %>% select(-matches("id|pricepernight|flag")) %>%
 
 #Boxes_Scatters
 
-# Dummy Tables 4: offer_cat, accommodationtype, neighbourhood
+# Dummy Tables 4: offer_cat, accommodationtype, neighbourhood ----
   # Get vector of raw factor levels & Dataframe of dummies if in level 
 
 # Offer Category
@@ -197,6 +201,8 @@ colnames(Dummies4) <- paste0("city_",colnames(Dummies4))
 df <- cbind(df,Dummies1,Dummies2,Dummies3) %>% 
   select(-c(city_actual,offer_cat,`p0% no offer`))
 
+
+# Var name cleaning ------
 colnames(df) <- gsub("+","",
                      gsub("%","",
                           gsub("17._","",
@@ -333,6 +339,7 @@ rownames(SumStatTable) <- models
 SumStatTable
   # Model Choice : Random Forest -> mtry = 7 , Min.NodeSize = 5
 
+
 #### Final Model Re-Estimation ####
 train_control <- trainControl(method = "none",verboseIter = FALSE)  
 
@@ -355,6 +362,7 @@ system.time({
   )
 })
 
+rf_model_final$finalModel
 summary(rf_model_final)
 
 #### Summary of RF_2_Final Model ####
@@ -380,6 +388,10 @@ SumStatsFinalModelTable
 df %>% ggplot(aes(y = pricepernight, x = predicted_price)) +
   geom_point() + geom_abline(intercept = 0, slope = 1)
 
+df %>% ggplot(aes(y = pricepernight_ln, x = predicted_price_ln)) +
+  geom_point() + geom_abline(intercept = 0, slope = 1)
+
+
 #### Residual Analysis 2 Find BEST DEALS ----
   # i.e. Largest Negative residuals
     # largest as in ? Percent / Money saved / total money saved
@@ -393,13 +405,18 @@ df$res <- round(df$pricepernight - df$predicted_price,1)
 df %>% colnames()
 
 # Hotels ranked by Best Deals according to our model
-Deals <- df %>% select(hotel_id,starrating,pricepernight, predicted_price, res,Nrnights,
-                       accommodationtype,neighbourhood, center1distance,center2distance,
-                       rating2_ta,rating2_ta_reviewcount,rating_reviewcount,guestreviewsrating) %>%
+Deals <- df %>% select(hotel_id,starrating,pricepernight, res,Nrnights,
+                       accommodationtype,neighbourhood, center1distance,
+                       rating2_ta,rating2_ta_reviewcount) %>%
   arrange(res)
 
-rbind(Deals[c(1:5),],
-Deals[Deals$hotel_id %in% c(21912, 21975, 22344, 22080, 22184),])
+Deals <- rbind(Deals[c(1:5),],
+               Deals[Deals$hotel_id %in% c(21912, 21975, 22344, 22080, 22184),])
+
+names <- c("Hotel_id","Stars","Avg.Price",
+           "vs_Prediction","Nights","Type",
+           "Where?","Miles fr Center","TA_Rating","Nr.Ratings")
+colnames(Deals) <- names
 
 # Best Deals according to Gabors:
   # IDs: 21912, 21975, 22344, 22080, 22184
