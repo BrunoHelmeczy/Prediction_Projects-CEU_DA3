@@ -187,6 +187,7 @@ colnames(Dummies1) <- paste0("p",Dummies1 %>% colnames())
 # Accommodation Type
 Levels <- levels(factor(unlist(df$accommodationtype)))
 Dummies2 <- as.data.frame(do.call(rbind, lapply(lapply(df$accommodationtype, factor, Levels), table)))
+Dummies2 %>% colnames()
 
 # Neighbourhood
 Levels <- levels(factor(unlist(df$neighbourhood)))
@@ -323,9 +324,8 @@ Predictions <-data.frame(sapply(models,function(x) {
 
 Rsq <- NULL
 for (i in 1:3) {
-  Rsq[models[i]] <- round(mean(results[[3]][['Rsquared']][i,1:5]),3)
+  Rsq[models[i]] <- round(results[[3]][['Rsquared']][i,4],3)
 }
-
 
 SumStatTable <- as.data.frame(cbind(Rsq,rbindlist(lapply(Predictions, function(x) {
   tl <- list()
@@ -417,6 +417,7 @@ names <- c("Hotel_id","Stars","Avg.Price",
            "vs_Prediction","Nights","Type",
            "Where?","Miles fr Center","TA_Rating","Nr.Ratings")
 colnames(Deals) <- names
+Deals
 
 # Best Deals according to Gabors:
   # IDs: 21912, 21975, 22344, 22080, 22184

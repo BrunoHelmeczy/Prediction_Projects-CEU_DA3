@@ -5,7 +5,7 @@ date: "12/02/2021"
 output: pdf_document
 ---
 
-```{r setup, , message = F, warning = F, echo = F, eval = T}
+```{r setup, , message = F, warning = F, echo = T, eval = T}
 
 # PACKAGES
 library(caret)
@@ -109,7 +109,7 @@ df <- df %>% filter(pricepernight <= 400)
 
 **Distributions & Association Patterns:** Please see the most important quantitative variables' summary statistics below, as well as all variables' histograms in the appendices. One may observe skewness with long right tails for prices per night, both distance variables, & the Nr. of reviews posted on Trip Advisor, while for the alternative rating measure skewness with long left tail is visible. Based on the summary statistics & histograms I changed the target variable to its' log-form. Also due to observed summary statistics, histograms & association patterns, I log-transformed both distance measures & review counts, while taking the exponent of guest reviews. Finally, I pivoted neighbourhoods, offer categories, & accommodation type variables to dummy tables.
 
-```{r Hists & Summtable, warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+```{r Hists & Summtable, warning = F, message = F, echo = T, fig.height= 10, fig.align='center'}
 
 # Plot Variable Distributions & Frequency tables ----
 Hists <- lapply(df %>% select(-matches("id")) %>% colnames(),function(x) {
@@ -150,7 +150,7 @@ table %>% knitr::kable()
 ```
 
 
-```{r Scatters & Boxes, warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+```{r Scatters & Boxes, warning = F, message = F, echo = T, fig.height= 10, fig.align='center'}
 
 # Check 4 Transformations & Dummy Feature Engineering ->
   # Log: 
@@ -248,7 +248,7 @@ df <- df %>% rename(
 **Model Comparisons:** With cleaning & transformations out of the way, 3 models were specified, each using the same group of predictor variables & predicting the natural logarithm of prices per night. Given the goal of this analysis is to find best deals in sample, no holdout data was sampled, however I performed 10-fold cross-validation. Please see the models' resulting summary statistics below, having already transformed log-price predictions to level-forms. One can observe the Regression Tree to beat the Multiple-Linear Regression model in terms of Mean absolute error (24.5 vs 30.9) & Root Mean Square error (35.3 vs 43.7), despite boasting slightly lower Adjusted R-squared (52.7% vs 56.6%). The Random Forest model however, using 7 variables at a time & a minimum node size of 5, vastly outperforms both, boasting ca. 16% higher adjusted R-squared (68.8% vs 52.7%), over 8 euros lower MAE (16.3 vs 24.5) & over 10 euros less RMSE (24.8 vs 35.3). As such, the Random Forest is the clear winner & therefore is my chosen final model.
 
 
-```{r models , , warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+```{r models , , warning = F, message = F, echo = T, fig.height= 10, fig.align='center'}
 
 # Model Specifications -------------
 predictors <- df %>% 
@@ -355,7 +355,7 @@ SumStatTable %>% kable()
 **Final Model:** Please see the final models' summary statistics below, re-estimated on the complete dataset. Fitted to the complete dataset, though Adjusted R-squared slightly decreased to 68.3%, both MAE & RMSE improved marginally. Importantly, the Root Mean Square Error only represents 16.6% of the average daily room price. With that, the model is ready to find the 5 best deals in town for what presumably is the christmas period.
 
 
-```{r , , warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+```{r , , warning = F, message = F, echo = T, fig.height= 10, fig.align='center'}
 
 #### Final Model Re-Estimation ####
 train_control <- trainControl(method = "none",verboseIter = FALSE)  
@@ -410,7 +410,7 @@ SumStatsFinalModelTable %>% kable()
 **The 5 Best Deals:** Please see the 5 best deals according to the final model, as well as the 5 hotels provided as best deals' according to the reference model provided for this course. Interestingly, the 5 best deals seem quite diverse in nature & price, incorporating 2 hotels in Innere Stadt of different star rating for 1 night, 1 apartment just over a mile from the centre that is quite budget-friendly, & 2 apartments further from the centre, however 1 of them for 4 nights. Thus, if one sees this analysis' purpose to be finding a diverse variety of alternatives that represent good value-for-money, then the final Random Forest model achieves that purpose, each deal offering a daily bargain between 44-55 euros according to our model. Meanwhile, the deals offered by the 5 hotels provided as best deals' according to a reference model only represented bargains of 11-18 euros, 1 of them even being over-priced by 28 euros according to the final model. 
 
 
-```{r , , warning = F, message = F, echo = F, fig.height= 10, fig.align='center'}
+```{r , , warning = F, message = F, echo = T, fig.height= 10, fig.align='center'}
 #### Residual Analysis 2 Find BEST DEALS ----
   # i.e. Largest Negative residuals
     # largest as in ? Percent / Money saved / total money saved
@@ -450,13 +450,13 @@ This report investigated the best hotel deals available in Vienna, during the 20
 
 ## 1) Variable Histograms
 
-```{r Hists , warning = F, message = F, echo = F, results= 'asis',  fig.height=2, fig.width=3}
+```{r Hists , warning = F, message = F, echo = T, results= 'asis',  fig.height=2, fig.width=3}
 Hists
 ```
 
 ## 2) Scatterplot Associations & Ridge Distributions
 
-```{r Boxes & Scatters, warning = F, message = F, echo = F, results= 'asis',  fig.height=2, fig.width=3}
+```{r Boxes & Scatters, warning = F, message = F, echo = T, results= 'asis',  fig.height=2, fig.width=3}
 Boxes_Scatters
 ```
 
