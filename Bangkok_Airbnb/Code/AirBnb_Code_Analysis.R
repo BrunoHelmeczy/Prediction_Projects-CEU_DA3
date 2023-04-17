@@ -1,26 +1,24 @@
-library(stargazer)
-library(Hmisc)
-library(readr)
-library(rattle)
-library(tidyverse)
-library(caret)
-library(ranger)
-library(Hmisc)
-library(knitr)
-library(kableExtra)
-library(xtable)
-library(data.table)
-library(stringr)
-library(dplyr) 
-library(ggthemes)
-library(rpart)
-library(ggplot2)
+Libs <- c(
+    "stargazer" ,"Hmisc" ,"readr" ,"rattle" ,"tidyverse" ,"caret" ,
+    "ranger" ,"Hmisc" ,"knitr" ,"kableExtra" ,"xtable" ,
+    "stringr" ,"dplyr" ,"ggthemes" ,"rpart" ,"ggplot2"
+)
+
+invisible(sapply(Libs, function(l) {
+    if (!require(l, character.only = TRUE)) {
+        install.packages(l)
+        require(l, , character.only = TRUE)
+    } 
+}))
 
 rm(list=ls())
 
-BangkokClean <- read.csv("https://raw.githubusercontent.com/BrunoHelmeczy/Prediction_Projects-CEU_DA3/main/Bangkok_Airbnb/Data/Clean/airbnb_bangkok_cleaned.csv",
-                         stringsAsFactors = T)
-df <- BangkokClean 
+filename <- "https://raw.githubusercontent.com/BrunoHelmeczy/Prediction_Projects-CEU_DA3/main/Bangkok_Airbnb/Data/Clean/airbnb_bangkok_cleaned.csv"
+
+BangkokClean <- read.csv(filename, stringsAsFactors = T)
+# BangkokClean <- fread(filename)
+
+df <- BangkokClean
 #### 1) Plot var distributions en-mass ####
     # Colnames selection:  df %>% select(-matches("^d_|^l_")
     # Dummies -> seperate "Race"-style plot - as for DA2-Ass2
@@ -28,14 +26,15 @@ df <- BangkokClean
       #   continuous -> histogram
       #   Neighborhoods -> invert axes -> geom bar + geom_point(x = sum()/nrow(df))
 
-
-allplots <- for(i in df %>% colnames()){
-  plt <- ggplot(df, aes_string(x=i)) +
-    geom_bar() + theme_tufte() + labs(title = paste0("Frequency Distribution of ",i) )
+allplots <- for(i in colnames(df)){
+# allplots <- for(i in colnames(df)[1:5]){
+  plt <- ggplot(df, aes_string(x = i)) +
+    geom_bar() + 
+    theme_tufte() + 
+    labs(title = paste0("Frequency Distribution of ", i) )
   print(plt)
 #  Sys.sleep(0.1)
 }
-
 
 df %>% select(matches("^d_|^l_|^flag_")) %>% colnames()
 df %>% select(matches("^f_")) %>% colnames()
