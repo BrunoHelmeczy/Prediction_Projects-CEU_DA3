@@ -1,24 +1,23 @@
 Libs <- c(
     "stargazer" ,"Hmisc" ,"readr" ,"rattle" ,"tidyverse" ,"caret" ,
     "ranger" ,"Hmisc" ,"knitr" ,"kableExtra" ,"xtable" ,
-    "stringr" ,"dplyr" ,"ggthemes" ,"rpart" ,"ggplot2"
+    "stringr" ,"dplyr" ,"ggthemes" ,"rpart" ,"ggplot2",
+    'data.table', 'plotly'
 )
 
 invisible(sapply(Libs, function(l) {
     if (!require(l, character.only = TRUE)) {
         install.packages(l)
-        require(l, , character.only = TRUE)
+        require(l, character.only = TRUE)
     } 
 }))
 
 rm(list=ls())
+options(scipen = 999)
 
 filename <- "https://raw.githubusercontent.com/BrunoHelmeczy/Prediction_Projects-CEU_DA3/main/Bangkok_Airbnb/Data/Clean/airbnb_bangkok_cleaned.csv"
+df <- fread(filename)
 
-BangkokClean <- read.csv(filename, stringsAsFactors = T)
-# BangkokClean <- fread(filename)
-
-df <- BangkokClean
 #### 1) Plot var distributions en-mass ####
     # Colnames selection:  df %>% select(-matches("^d_|^l_")
     # Dummies -> seperate "Race"-style plot - as for DA2-Ass2
@@ -26,129 +25,121 @@ df <- BangkokClean
       #   continuous -> histogram
       #   Neighborhoods -> invert axes -> geom bar + geom_point(x = sum()/nrow(df))
 
-allplots <- for(i in colnames(df)){
-# allplots <- for(i in colnames(df)[1:5]){
-  plt <- ggplot(df, aes_string(x = i)) +
+allplots <- lapply(colnames(df), function(i) {
+  VarPretty <- stringr::str_to_title(gsub('_', ' ', i))
+  
+  df %>% 
+    ggplot(aes(x = df[[i]])) + 
     geom_bar() + 
     theme_tufte() + 
-    labs(title = paste0("Frequency Distribution of ", i) )
-  print(plt)
-#  Sys.sleep(0.1)
-}
+    xlab(VarPretty) + 
+    labs(
+      title = paste0("Frequency Distribution: ", VarPretty)
+    )
+})
 
-df %>% select(matches("^d_|^l_|^flag_")) %>% colnames()
-df %>% select(matches("^f_")) %>% colnames()
-df %>% select(matches("^usd_")) %>% colnames()
-df %>% select(matches("^n_")) %>% select(-matches("_ln|_2")) %>% colnames()
+AllCols <- names(df)
+FactorCols <- grep('^f_', AllCols, value = TRUE)
+USDcols <- grep('^usd_', AllCols, value = TRUE)
+NrCols <- grep('^n_', AllCols, value = TRUE) %>%
+  grep('_ln|_2', ., invert = TRUE, value = TRUE)
+FlagsBoolCols <- grep("^d_|^l_|^flag_", AllCols, value = TRUE)
 
-df %>% select(-matches("^f_|^d_|^l_|^flag_|^usd_|_ln|_2|^n_")) %>% colnames()
+# unique(c(FactorCols, USDcols, NrCols, FlagsBoolCols))
+# grep("^f_|^d_|^l_|^flag_|^usd_|_ln|_2|^n_", AllCols, invert = TRUE, value = TRUE)
 
-df  %>% colnames()
+#### Modeling ####
 
-#### Modelling ####
-
-#### 1) Prep ####
-  
-#### Re-set factors ####
-
-#sapply(df %>% select(matches("^f_")),factor)
-df <- df %>% mutate(
-  f_property_type = factor(f_property_type),
-  f_neighbourhood_cleansed= factor(f_neighbourhood_cleansed),
-  f_has_1_review_monthly= factor(f_has_1_review_monthly),
-  f_review_scores_rating= factor(f_review_scores_rating),
-  f_number_of_reviews= factor(f_number_of_reviews),
-  f_sales_365 = factor(f_sales_365),
-  f_sales_90 = factor(f_sales_90),
-  f_sales_60 = factor(f_sales_60),
-  f_sales_30 = factor(f_sales_30),
-  f_min_nights = factor(f_min_nights),
-  f_beds = factor(f_beds),
-  f_bedrooms = factor(f_bedrooms),
-  f_bathrooms = factor(f_bathrooms),
-  f_host_listing = factor(f_host_listing),
-  f_host_accepts_all = factor(f_host_accepts_all)
-)
+# 1) Prep
+df[, (FactorCols) := lapply(.SD, factor), .SDcols = FactorCols]
 
 #### Variable Grouping ####
-  Prop_vars <- df %>% select(-matches(".*host.*|.*review.*|^d_|n_days|^usd")) %>% colnames()
-  Host_vars <- df %>% select(matches(".*host.*")) %>%  colnames()
-  Review_vars <- df %>% select(matches(".*review.*|n_days")) %>%  colnames()
-  Amenities_vars <- df %>% select(matches("^d_")) %>%  colnames()
+Prop_vars      <- grep(".*host.*|.*review.*|^d_|n_days|^usd", AllCols, value = TRUE) 
+Host_vars      <- grep(".*host.*", AllCols, value = TRUE) 
+Review_vars    <- grep(".*review.*|n_days", AllCols, value = TRUE) 
+Amenities_vars <- grep("^d_", AllCols, value = TRUE)
 
 # Interactions: Amenities + Props4Interactions
-  #  Props4Interactions 
-  Props4Interactions <- c(df[Prop_vars] %>% select(matches("^f_")) %>% colnames(),"n_accommodates") 
+Props4Interactions <- c(grep('^f_', Prop_vars, value = TRUE), "n_accommodates")
 
-  Interactions <- paste0(paste0("( ",paste0(Props4Interactions, collapse = " + ")," )")
-                         ," * ",
-                         paste0("( ",paste0(Amenities_vars, collapse = " + ")," )"))
-  
-#### Create Predictors ####
-  predictors1 <- Prop_vars
-  predictors2 <- c(Prop_vars,Host_vars,Review_vars)
-  predictors3 <- c(Prop_vars,Host_vars,Review_vars,Amenities_vars)
-  predictorsE <- c(Prop_vars,Host_vars,Review_vars,Amenities_vars,Interactions)
-  
-  
-PriceHist <- df %>% ggplot(aes(x = usd_price)) +
-  geom_histogram( color = "red", fill = "navyblue",bins = 50) + theme_tufte() +
-  labs(title = "Price frequency distribution", x = "Price",
-       y = "Frequency Count") + xlim(0,300)
-  
-LnPriceHist <- df %>% ggplot(aes(x = usd_price_ln)) +
-  geom_histogram( color = "red", fill = "navyblue",bins = 50) + theme_tufte() +
-  labs(title = "Logged-Price frequency distribution", x = "Log-Transformed Price",
-       y = "Frequency Count")
+Interactions <- paste0(
+  paste0("( ",paste0(Props4Interactions, collapse = " + ")," )")
+  ," * ",
+  paste0("( ",paste0(Amenities_vars, collapse = " + ")," )")
+)
+
+predictors1 <-   Prop_vars
+predictors2 <- c(predictors1, Host_vars, Review_vars)
+predictors3 <- c(predictors2, Amenities_vars)
+predictorsE <- c(predictors3, Interactions)
+
+PriceHist <- plot_ly(
+  data = df,
+  x =~ usd_price,
+  type = 'histogram'
+) %>% 
+  layout(
+    title = 'Price Frequency Distribution',
+    yaxis = list(title = list(text = 'Frequency Count')),
+    xaxis = list(range = c(0, 300), title = 'Price ($)')
+  ) %>% 
+  plotly::config(displayModeBar = FALSE)
+
+LnPriceHist <- plot_ly(
+  data = df,
+  x =~ usd_price_ln,
+  type = 'histogram'
+) %>% 
+  layout(
+    title = 'Price Frequency Distribution',
+    yaxis = list(title = list(text = 'Frequency Count')),
+    xaxis = list( title = 'Log Price ($)')
+  ) %>% 
+  plotly::config(displayModeBar = FALSE)
 
 #### Sample vs Holdout sets ####
 set.seed(1)
-  train_indices <- as.integer(createDataPartition(df$usd_price_ln, p = 0.7, list = FALSE))
-  data_train <- df[train_indices, ]
-  data_holdout <- df[-train_indices, ]
 
-# train control is 5 fold cross validation
-  train_control <- trainControl(method = "cv",
-                                number = 5,
-                                verboseIter = FALSE)  
+train_indices <- as.integer(createDataPartition(df$usd_price_ln, p = 0.7, list = FALSE))
+data_train <- df[train_indices, ]
+data_holdout <- df[-train_indices, ]
+
+train_control <- trainControl(
+    method = "cv",
+    number = 5,
+    verboseIter = FALSE
+)
 
 #### OLS ####
-
-colnames(df)
-  
- set.seed(1234)
-  system.time({
-    ols_model <- train(
-      formula(paste0("usd_price_ln ~ ", paste0(predictors3, collapse = " + "))),
-      data = data_train,
-      method = "lm",
-      trControl = train_control
-    )
-  })
-  
-  ols_model_coeffs <-  ols_model$finalModel$coefficients
-ols_model_coeffs_df <- data.frame(
-    "variable" = names(ols_model_coeffs),
-    "ols_coefficient" = ols_model_coeffs
-  ) %>%
-    mutate(variable = gsub("`","",variable))
-
-#### CART ####
-
-# CART -> Very large & pruned tree
-
 set.seed(1234)
+
+system.time({
+  ols_model <- train(
+    formula(paste0("usd_price_ln ~ ", paste0(predictors3, collapse = " + "))),
+    data = data_train,
+    method = "lm",
+    trControl = train_control
+  )
+}) # ca. 1.0s
+  
+ols_model_coeffs <-  ols_model$finalModel$coefficients
+ols_model_coeffs_df <- data.table(
+  "variable"        = names(ols_model_coeffs),
+  "ols_coefficient" = round(ols_model_coeffs, 3)
+) %>% 
+  .[, variable := gsub('`', '', variable)]
+
+#### CART - Very large & pruned tree ####
 system.time({
   cart_model <- train(
     formula(paste0("usd_price_ln ~ ", paste0(predictors3, collapse = " + "))),
     data = data.frame(sapply(data_train,as.numeric)),
     method = "rpart",
     trControl = train_control,
-    
-    tuneGrid= expand.grid(cp = 0.0005))
-})
+    tuneGrid = expand.grid(cp = 0.0005))
+}) # ca. 1.1s
 
-fancyRpartPlot(cart_model$finalModel, sub = "")
+# fancyRpartPlot(cart_model$finalModel, sub = "")
 
 # take the last model (large tree) and prunce (cut back)
 #pfit <-prune(cart_model$finalModel, cp=0.005 )
@@ -157,8 +148,6 @@ fancyRpartPlot(cart_model$finalModel, sub = "")
 
 #### LASSO ####
 # using extended model w interactions
-
-set.seed(1234)
 system.time({
   lasso_model <- train(
     formula(paste0("usd_price_ln ~ ", paste0(predictorsE, collapse = " + "))),
@@ -168,7 +157,10 @@ system.time({
     tuneGrid =  expand.grid("alpha" = 1, "lambda" = seq(0.01, 0.25, by = 0.04)),
     trControl = train_control
   )
-})
+}) # ca. 21s
+
+# TODO:
+  # to continue from here
 
 lasso_coeffs <- coef(
   lasso_model$finalModel,
@@ -176,65 +168,58 @@ lasso_coeffs <- coef(
   as.matrix() %>%
   as.data.frame() %>%
   rownames_to_column(var = "variable") %>%
-  rename(lasso_coefficient = `1`)  # the column has a name "1", to be renamed
+  setDT() %>% 
+  setnames(old = 's1', 'lasso_coefficient') %>%
+  .[order(-abs(lasso_coeffs[['lasso_coefficient']]))]
 
-lasso_coeffs_non_null <-as.data.frame(lasso_coeffs[!lasso_coeffs$lasso_coefficient == 0,]) %>%
-  arrange(desc(abs(lasso_coefficient)))
+lasso_coeffs_non_null <-lasso_coeffs[lasso_coefficient != 0]
 
-lasso_coeffs_non_null <- lasso_coeffs[!lasso_coeffs$lasso_coefficient == 0,]
-
-regression_coeffs <- merge(lasso_coeffs_non_null, ols_model_coeffs_df,  by = "variable", all=TRUE)
-#regression_coeffs %>%
-#  write.csv(file = paste0(output, "regression_coeffs.csv"))
-
-
+regression_coeffs <- merge(
+  lasso_coeffs_non_null, 
+  ols_model_coeffs_df,
+  by = "variable", 
+  all = TRUE
+)
   
 #### Random Forest ####
-
-  # set tuning
-  tune_grid <- expand.grid(
-    .mtry = c( 5, 7, 9),
-    .splitrule = "variance",
-    .min.node.size = c(5, 10)
+tune_grid <- expand.grid(
+  .mtry = c( 5, 7, 9),
+  .splitrule = "variance",
+  .min.node.size = c(5, 10)
+)
+  
+# simpler model for model A (1)
+system.time({
+  rf_model_1 <- train(
+    formula(paste0("usd_price_ln ~ ", paste0(predictors2, collapse = " + "))),
+    data = data_train,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity"
   )
-  
-  
-  # simpler model for model A (1)
-set.seed(1234)
-  system.time({
-    rf_model_1 <- train(
-      formula(paste0("usd_price_ln ~ ", paste0(predictors2, collapse = " + "))),
-      data = data_train,
-      method = "ranger",
-      trControl = train_control,
-      tuneGrid = tune_grid,
-      importance = "impurity"
-    )
-  })
-  rf_model_1
-  
-  # set tuning for benchmark model (2)
-  tune_grid <- expand.grid(
-    .mtry = c(8, 10, 12),
-    .splitrule = "variance",
-    .min.node.size = c(5, 10, 15)
-  )
-  
-set.seed(1234)
-  system.time({
-    rf_model_2 <- train(
-      formula(paste0("usd_price_ln", paste0(" ~ ",paste0(predictors3, collapse = " + ")))),
-      data = data_train,
-      method = "ranger",
-      trControl = train_control,
-      tuneGrid = tune_grid,
-      importance = "impurity"
-    )
-  })
-  
-rf_model_2
+}) # ca. 60s
+# rf_model_1
 
-set.seed(1234)
+# set tuning for benchmark model (2)
+tune_grid <- expand.grid(
+  .mtry = c(8, 10, 12),
+  .splitrule = "variance",
+  .min.node.size = c(5, 10, 15)
+)
+  
+system.time({
+  rf_model_2 <- train(
+    formula(paste0("usd_price_ln", paste0(" ~ ",paste0(predictors3, collapse = " + ")))),
+    data = data_train,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity"
+  )
+}) # ca. 120s
+# rf_model_2
+
 system.time({
   rf_model_2_lev <- train(
     formula(paste0("usd_price", paste0(" ~ ",paste0(predictors3, collapse = " + ")))),
@@ -244,71 +229,85 @@ system.time({
     tuneGrid = tune_grid,
     importance = "impurity"
   )
-})
-
-rf_model_2_lev
-  
+}) # ca. 128s
+# rf_model_2_lev
 
 
   # Tuning parameter choice 1
-  result_1 <- matrix(c(
+result_1 <- matrix(c(
     rf_model_1$finalModel$mtry,
     rf_model_2$finalModel$mtry,
     rf_model_2_lev$finalModel$mtry,
     rf_model_1$finalModel$min.node.size,
     rf_model_2$finalModel$min.node.size,
     rf_model_2_lev$finalModel$min.node.size
-    
   ),
-  nrow=3, ncol=2,
-  dimnames = list(c("Model 1", "Model 2","Model 2 level"),
-                  c("Min vars","Min nodes")))
-  
+  nrow = 3, 
+  ncol = 2,
+  dimnames = list(
+    c("Model 1", "Model 2","Model 2 level"),
+    c("Min vars","Min nodes")
+  )
+)
 
 # evaluate random forests -------------------------------------------------
   
-  
 #------------------ Model Comparison ####
+final_models <- list(
+  "OLS" = ols_model,
+  "LASSO (with Interactions)" = lasso_model,
+  "Random forest (Small)" = rf_model_1,
+  "Random forest" = rf_model_2
+)
   
-  final_models <-
-    list("OLS" = ols_model,
-         "LASSO (model w/ interactions)" = lasso_model,
-         "Random forest (smaller)" = rf_model_1,
-         "Random forest" = rf_model_2)
-  
-  results <- resamples(final_models) %>% summary()
-  
+results <- resamples(final_models) %>% 
+  summary()
   
 models <- c("ols_model","lasso_model","rf_model_1","rf_model_2")  
-Predictions <-data.frame(sapply(models[1:4],function(x) {
+
+Predictions <- sapply(models[-2],function(x) {
   tl <- list()
+  
   model <- eval(parse(text = x))
-  tl[[x]] <- predict(model,newdata = data_train)
+  
+  tl[[x]] <- predict(model, newdata = data_train)
+
   res <- tl[[x]] - data_train$usd_price_ln
   StDev <- sd(res)
-  tl[[x]] <- exp(tl[[x]]) * exp((StDev^2)/2)
+  
+  tl[[x]] <- exp(tl[[x]]) * exp( (StDev ^ 2) / 2)
   
   return(tl)
-}))
+}) %>% 
+  data.frame() %>% 
+  setDT()
 
-Rsq <- NULL
-for (i in 1:4) {
-  Rsq[models[i]] <- round(mean(results[[3]][['Rsquared']][i,1:5]),3)
-}
+Rsq <- results[[3]][['Rsquared']][, c(1:3, 5:6)] %>% 
+  t() %>% 
+  data.table() 
 
-SumStatTable <- as.data.frame(cbind(Rsq,rbindlist(lapply(Predictions, function(x) {
+Rsq <- Rsq[, lapply(.SD, function(x) round(mean(x), 3)), .SDcols = names(Rsq)] %>% 
+  setnames(new = models) %>% 
+  unlist()
+
+SumStatTable <- lapply(Predictions, function(x) {
   tl <- list()
-  tl[['MAE']] <- round(MAE(x,data_train$usd_price),3)
-  tl[['RMSE']] <- round(RMSE(x, data_train$usd_price),3)
+  tl[['MAE']]       <- round(MAE(x,data_train$usd_price),3)
+  tl[['RMSE']]      <- round(RMSE(x, data_train$usd_price),3)
   tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_train$usd_price),3)
   return(tl)
-}))))
-rownames(SumStatTable) <- models
+}) %>% 
+  rbindlist() %>% 
+  cbind(Rsq = Rsq[-2])
+
+rownames(SumStatTable) <- models[-2]
 SumStatTable
 
-
 #### Final Model Re-Estimation ####
-train_control <- trainControl(method = "none",verboseIter = FALSE)  
+train_control_fin <- trainControl(
+  method = "none",
+  verboseIter = FALSE
+)  
 
 # set tuning for final model
 tune_grid <- expand.grid(
@@ -317,52 +316,65 @@ tune_grid <- expand.grid(
   .min.node.size = c(5)
 )
 
-set.seed(1234)
 system.time({
   rf_model_final <- train(
     formula(paste0("usd_price_ln", paste0(" ~ ",paste0(predictors3, collapse = " + ")))),
     data = data_train,
     method = "ranger",
-    trControl = train_control,
+    trControl = train_control_fin,
     tuneGrid = tune_grid,
     importance = "impurity"
   )
-})
-
-
+}) # ca. 2s
 
 #### Summary of RF_2_Final Model ####
-data_holdout_w_prediction <- data_holdout %>%
-  mutate(predicted_price_ln = predict(rf_model_final, newdata = data_holdout))
+data_holdout_w_prediction <- copy(data_holdout) %>% 
+  .[, predicted_price_ln := predict(rf_model_final, newdata = data_holdout)] %>% 
+  .[, res := predicted_price_ln - usd_price_ln]
 
-data_holdout_w_prediction <- data_holdout_w_prediction %>% mutate(res = predicted_price_ln - usd_price_ln)
 StDev <- sd(data_holdout_w_prediction$res)
-data_holdout_w_prediction$predicted_price <- exp(data_holdout_w_prediction$predicted_price_ln) * exp((StDev^2)/2)
+
+data_holdout_w_prediction[, predicted_price := exp(predicted_price_ln) * exp((StDev ^ 2) / 2)]
+
 Rsq <- rf_model_final$finalModel$r.squared
 
-SumStatsFinalModelTable <- 
-  cbind(Rsq,rbindlist(lapply(data_holdout_w_prediction[c("predicted_price")], function(x) {
-  tl <- list()
-  tl[['MAE']] <- round(MAE(x,data_holdout$usd_price),3)
-  tl[['RMSE']] <- round(RMSE(x, data_holdout$usd_price),3)
-  tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_holdout$usd_price),3)
-  return(tl)
-})))
+SumStatsFinalModelTable <- lapply(data_holdout_w_prediction[,c("predicted_price")], function(x) {
+      tl <- list()
+      tl[['MAE']] <- round(MAE(x,data_holdout$usd_price),3)
+      tl[['RMSE']] <- round(RMSE(x, data_holdout$usd_price),3)
+      tl[['RMSE_norm']] <- round(tl[['RMSE']]/mean(data_holdout$usd_price),3)
+      return(tl)
+  }) %>% 
+    rbindlist() %>% 
+    cbind(Rsq)
 
 SumStatsFinalModelTable
 
-
 # MODEL DIAGNOSTICS -------------------------------------------------------
-#
-#########################################################################################
-  
+
 # Pred vs Actual Y Line + Scatter
-PredvsAccPlot <- data_holdout_w_prediction %>% ggplot(aes(x = usd_price, y = usd_price)) +
-  geom_point(aes(y = predicted_price)) + 
-  geom_line() +
-  theme_tufte() +
-  labs(title = "Actual versus Predicted Prices",
-       x = "Actual Prices", y = "Predicted Prices")
+PredvsAccPlot <- data_holdout_w_prediction %>% 
+  plot_ly(
+    type = 'scatter',
+    mode = 'lines',
+    showlegend = FALSE,
+    x =~ usd_price,
+    y =~ usd_price,
+    hoverinfo = 'text',
+    text =~ paste0('Actual Price: ', round(usd_price), '$')
+  ) %>% 
+  add_trace(
+    y =~ predicted_price,
+    mode = 'markers',
+    text =~ paste0('Predicted Price: ', round(predicted_price), '$')
+  ) %>% 
+  layout(
+    title = "Actual versus Predicted Prices",
+    xaxis = list(title = "Actual Prices ($)"),
+    yaxis = list(title = "Predicted Prices ($)"),
+    hovermode = 'x'
+  ) %>% 
+  plotly::config(displayModeBar = FALSE)
 
 PredvsAccPlot
 
@@ -403,7 +415,7 @@ d <- data_holdout_w_prediction %>%
 colnames(a) <- c("", "RMSE", "Mean price", "RMSE/price")
 colnames(b) <- c("", "RMSE", "Mean price", "RMSE/price")
 colnames(c) <- c("", "RMSE", "Mean price", "RMSE/price")
-d<- cbind("All", d)
+d <- cbind("All", d)
 colnames(d) <- c("", "RMSE", "Mean price", "RMSE/price")
 
 line1 <- c("Type", " ", " ", " ")
