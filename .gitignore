@@ -1,1 +1,6 @@
 *.pdf
+*.pyc
+*.rdb
+*.rdx
+*.RData
+*.Rhistory
