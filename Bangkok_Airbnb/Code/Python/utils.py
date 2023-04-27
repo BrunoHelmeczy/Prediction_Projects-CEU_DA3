@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from pathlib import Path
 
 def LoadData():
@@ -52,17 +53,20 @@ def DescribeVariables(Data):
 
     return df
 
-def convertBooleans(Data, Cols):
-    Data.fillna({col: 'f' for col in Cols}, inplace = True)
+def DropCols(Data, Cols):
+    Data.drop(
+        Cols, 
+        axis = 1,
+        inplace = True,
+        errors = 'ignore'
+    )
 
-    Data.replace('t', 1, inplace = True)
-    Data.replace('f', 0, inplace = True)
-
-    Data.loc[:, Cols] = Data.loc[:, Cols].astype({col: int for col in Cols})
-
-    Data.rename(
-        {col: f"l_{col}" for col in Cols},
-        inplace = True
+def DropRows(Data, Index):
+    Data.drop(
+        Index, 
+        axis = 0,
+        inplace = True,
+        errors = 'ignore'
     )
 
 def CalcColumnSimilarity(Data, ColumnList):
@@ -79,7 +83,20 @@ def CalcColumnSimilarity(Data, ColumnList):
                 ColSimilarity.append(round(nr_sames / check.shape[0], 3))
 
     return pd.DataFrame(
-        data = np.array(ColSimilarity).reshape(vector_length, vector_length),
-        index = ColumnList,
+        data    = np.array(ColSimilarity).reshape(vector_length, vector_length),
+        index   = ColumnList,
         columns = ColumnList
+    )
+
+def convertBooleans(Data, Cols):
+    Data.fillna({col: 'f' for col in Cols}, inplace = True)
+
+    Data.replace('t', 1, inplace = True)
+    Data.replace('f', 0, inplace = True)
+
+    Data.loc[:, Cols] = Data.loc[:, Cols].astype({col: int for col in Cols})
+
+    Data.rename(
+        {col: f"l_{col}" for col in Cols},
+        inplace = True
     )
