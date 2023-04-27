@@ -100,7 +100,7 @@ CalcColumnSimilarity <- function(Data, ColVector) {
       ColSimilarity[(i - 1) * length(ColVector) + j] <- round(sames / nrow(Data), 3)
     }
   }
-  
+
   out <- matrix(
     ColSimilarity,
     nrow = length(ColVector), 

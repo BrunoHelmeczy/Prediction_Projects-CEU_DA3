@@ -3,9 +3,9 @@ utils_file <- list.files(pattern = 'utils.R', recursive = TRUE, full.names = TRU
 source(utils_file)
 
 Libs <- c(
-  'stargazer', 'Hmisc', 'readr', 'rattle', 'tidyverse', 
-  'caret', 'ranger', 'Hmisc', 'knitr', 'kableExtra', 'rstudioapi',
-  'xtable', 'data.table', 'stringr', 'dplyr', 'plotly', 'quantmod'
+    'stargazer', 'Hmisc', 'readr', 'rattle', 'tidyverse', 
+    'caret', 'ranger', 'Hmisc', 'knitr', 'kableExtra', 'rstudioapi',
+    'xtable', 'data.table', 'stringr', 'dplyr', 'plotly', 'quantmod'
 )
 
 LoadLibraries(LibsVector = Libs)
@@ -25,10 +25,10 @@ VarDescribe <- DescribeVariables(Bangkok)
 Logic_Cols <- VarDescribe[VarType == 'logical', Vars]
 Bangkok[, ..Logic_Cols] %>% head()
 Bangkok[, (Logic_Cols) := lapply(.SD, as.numeric), .SDcols = Logic_Cols] %>% 
-  setnames(
-    old = Logic_Cols, 
-    new = paste0("l_",Logic_Cols)
-  )
+    setnames(
+        old = Logic_Cols, 
+        new = paste0("l_",Logic_Cols)
+    )
 
 # 2.2) IDs -> Delete (No modelling purpose) 
 ID_Cols <- VarDescribe[VarGroups == "IDs", Vars]
@@ -42,13 +42,13 @@ Host_Cols <- VarDescribe[VarGroups=="Host" & VarType != 'logical', Vars]
 PercCols <- c("host_response_rate","host_acceptance_rate")
 
 Bangkok[, (PercCols) := lapply(.SD, function(x) {
-  gsub('%', '', x) %>% as.numeric()
+    gsub('%', '', x) %>% as.numeric()
 }), .SDcols = PercCols] %>% 
-  FillNAs(PercCols) %>% 
-  setnames(
-    old = PercCols,
-    new = paste0('p_', PercCols)
-  )
+    FillNAs(PercCols) %>% 
+    setnames(
+        old = PercCols,
+        new = paste0('p_', PercCols)
+    )
 
 # Remove from Host Var list to handle
 Host_Cols <- Host_Cols[which(!Host_Cols %in% c("host_response_rate","host_acceptance_rate"))]
@@ -58,20 +58,20 @@ Host_Cols <- Host_Cols[which(!Host_Cols %in% c("host_response_rate","host_accept
 # host_verifications: list of objects indicating host are not scammers
 # the more the better & any single verifier is not in itself significant 
 Bangkok[, id := .I] %>% 
-  .[, keyby = id, n_host_verifications := length(str_split(host_verifications, ', ')[[1]])] %>% 
-  .[, (c('id', 'host_verifications')) := NULL]
+    .[, keyby = id, n_host_verifications := length(str_split(host_verifications, ', ')[[1]])] %>% 
+    .[, (c('id', 'host_verifications')) := NULL]
 
 # 2.3.3) Host Neighborhood 
 # where host comes from might be relevant -> should be factored 
 Bangkok[, host_neighbourhood := factor(trimws(gsub(
-  '[0-9]|Lower|Upper', '', 
-  host_neighbourhood)))]
+    '[0-9]|Lower|Upper', '', 
+    host_neighbourhood)))]
 
 HostCityFreq <- Bangkok[!is.na(host_neighbourhood), keyby = host_neighbourhood, .N] %>% 
-  .[order(-N)] %>% 
-  .[, total := sum(N)] %>% 
-  .[, cumsum := cumsum(N)] %>% 
-  .[, cumsumprct := cumsum / total]
+    .[order(-N)] %>% 
+    .[, total := sum(N)] %>% 
+    .[, cumsum := cumsum(N)] %>% 
+    .[, cumsumprct := cumsum / total]
 
 # outside top3 > 3% of data / value -> 'Other'
 top3hostcities <- HostCityFreq[1:3, host_neighbourhood]
@@ -83,14 +83,14 @@ Host_Cols <- Host_Cols[which(!Host_Cols %in% c("host_verifications","host_neighb
 
 # 2.3.4) Host Listings infos -> Seems similar to CalcListings Data 
 ListingCols <- c(
-  grep("listing", Host_Cols, value = T),
-  VarDescribe[VarGroups == 'CalcListings', Vars]
+    grep("listing", Host_Cols, value = T),
+    VarDescribe[VarGroups == 'CalcListings', Vars]
 )
 
 # Summing occurrences where they're unequal = 0 -> Delete 1
 NrDiff <- sum(
-  Bangkok[, get(ListingCols[1])] != Bangkok[, get(ListingCols[2])]
-  , na.rm = TRUE
+    Bangkok[, get(ListingCols[1])] != Bangkok[, get(ListingCols[2])]
+    , na.rm = TRUE
 ) # equals 0
 
 Bangkok[, (ListingCols[2]) := NULL]
@@ -98,8 +98,8 @@ Bangkok[, (ListingCols[2]) := NULL]
 ListingCols <- ListingCols[-2]
 # Compare each Listing Column -> count where values arent equal
 CalcColumnSimilarity(
-  Data = Bangkok,
-  ColVector = ListingCols
+    Data = Bangkok,
+    ColVector = ListingCols
 )
 
 # Substantively -> No reason to believe listing counts affect price
@@ -108,9 +108,9 @@ CalcColumnSimilarity(
 Bangkok[, (ListingCols[2:5]) := NULL]
 
 setnames(
-  Bangkok,
-  old = 'host_listings_count',
-  new = 'n_host_listings_count'
+    Bangkok,
+    old = 'host_listings_count',
+    new = 'n_host_listings_count'
 )
 
 # TODO: DATES a seperate Matter 
@@ -120,20 +120,12 @@ GeoCols <- VarDescribe[VarGroups == "Geo", Vars]
 Bangkok[, lapply(.SD, uniqueN), .SDcols = GeoCols]
 
 Bangkok[, neighbourhood_cleansed := factor(neighbourhood_cleansed)] %>% 
-  setnames(
-    old = 'neighbourhood_cleansed',
-    new = 'f_neighbourhood_cleansed'
-  )
+    setnames(
+        old = 'neighbourhood_cleansed',
+        new = 'f_neighbourhood_cleansed'
+    )
 
-# Check Uniqueness... 
-# Neighbourhood 700+ Values
-# Neighbourhood Cleansed - KEEP
-# Co-ordinate data -> Could very indirectly indicate info w.r.t. price
-# definitely non-linear
-# units so small, & not measuring relevant distance fr. somewhere
-# keep only Neighbourhood Cleansed -> as factor
-
-# difftime(Sys.time(), start, units = 'secs')
+Bangkok[, (GeoCols[-2]) := NULL]
 
 #### 2.5) Prop Info -> Prop/Room Type, Accommodates, Bathrooms, Bedrooms, Beds, Amenities ####
 PropCols <- VarDescribe[VarGroups == 'Property', Vars]
@@ -142,8 +134,8 @@ PropCols <- VarDescribe[VarGroups == 'Property', Vars]
 # 2.5.1) Room Types -> Keep only 'Entire home/apt' -> Only Var.Value left -> delete Var.
 # table(Bangkok$room_type)
 
-Bangkok <- Bangkok[room_type == "Entire home/apt"]
-Bangkok[, room_type := NULL]
+Bangkok <- Bangkok[room_type == "Entire home/apt"] %>% 
+    .[, room_type := NULL]
 
 PropCols <- PropCols[!PropCols %in% "room_type"]
 
@@ -211,27 +203,9 @@ Bangkok[, price := as.numeric(gsub('[^[:digit:].]', "", price))] %>%
 SalesCols <- SalesCols[!SalesCols %in% "price"]
 
 # 2.6.2) Stay restrictions -> Check similarity 
-# CheckVarSimilarity <- function(
-#     Keyword = "minimum_nights", 
-#     ColnameVector = SalesCols
-# ) {
-#   Cols2Check <- grep(Keyword, ColnameVector, value = T)
-#   
-#   ColSimilarity <- NULL
-#   for (i in 1:length(Cols2Check)) {
-#     for (j in 1:length(Cols2Check)) {
-#       ColSimilarity[(i-1)*length(Cols2Check)+j] <- round(
-#         sum(Bangkok[, get(Cols2Check[i])] == Bangkok[, get(Cols2Check[i])], na.rm= T) /nrow(Bangkok),3)
-#     }
-#   }
-#   # They seem quite different, but I definitely do not need info on rooms
-#   return(matrix(ColSimilarity,nrow = length(Cols2Check), ncol = length(Cols2Check)))  
-# }
-
-# Minimum Night Cols -> 97.5 - 98.6% identical -> No loss of info by throwing out
 MinNightCols <- grep('minimum_nights', SalesCols, value = T)
 CalcColumnSimilarity(Bangkok, MinNightCols)
-
+# 97.5 - 98.6% identical -> No loss of info by throwing out
 Bangkok[, (MinNightCols[-1]) := NULL]
 
 SalesCols <- SalesCols[!SalesCols %in% grep("minimum_nights",SalesCols, value = T)]
