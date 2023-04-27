@@ -41,11 +41,12 @@ StoreData <- function(Data, cwd = getActiveProject()) {
 DropUnusedCols <- function(Data) {
     #### 1) Delete URLs & Text datas
     drops <- c("host_thumbnail_url","host_picture_url",
-                "listing_url","picture_url",
-                "host_url","last_scraped",
-                "description","neighborhood_overview",
-                "host_about","host_response_time",
-                "name","space","host_location")
+        "listing_url","picture_url",
+        "host_url","last_scraped",
+        "description","neighborhood_overview",
+        "host_about","host_response_time",
+        "name","space","host_location"
+    )
 
     Data[, (drops) := NULL]
 
@@ -59,58 +60,59 @@ DropUnusedCols <- function(Data) {
 }
 
 DescribeVariables <- function(Data) {
-  VarGroups <- c(
-    rep("IDs",4),
-    rep("Host",10),
-    rep("Geo",4),
-    rep("Property",7),
-    rep("Sales",9),
-    rep("Availability",5),
-    rep("Satisfaction",13),
-    "Availability",
-    rep("CalcListings",4),
-    "Satisfaction"
-  )
+    VarGroups <- c(
+        rep("IDs",4),
+        rep("Host",10),
+        rep("Geo",4),
+        rep("Property",7),
+        rep("Sales",9),
+        rep("Availability",5),
+        rep("Satisfaction",13),
+        "Availability",
+        rep("CalcListings",4),
+        "Satisfaction"
+    )
   
-  VarDescribe <- data.table(
-    Vars = names(Data),
-    VarGroups, 
-    VarType = sapply(Data, class)
-  )
-  
-  return(VarDescribe)
+    VarDescribe <- data.table(
+        Vars = names(Data),
+        VarGroups, 
+        VarType = sapply(Data, class)
+    )
+    
+    return(VarDescribe)
 }
 
 FillNAs <- function(DF, Cols = PercCols) {
-  for (i in Cols) {
-    DF[is.na(get(i)), (i) := 0]
-  }
-  return(DF)
+    for (i in Cols) {
+        DF[is.na(get(i)), (i) := 0]
+    }
+    return(DF)
 }
 
 CalcColumnSimilarity <- function(Data, ColVector) {
-  ColSimilarity <- NULL
-  
-  for (i in 1:length(ColVector)) {
-    for (j in 1:length(ColVector)) {
-      sames <- sum(
-        Data[, get(ColVector[i])] == Data[, get(ColVector[j])], 
-        na.rm = T
-      )
-      ColSimilarity[(i - 1) * length(ColVector) + j] <- round(sames / nrow(Data), 3)
+    ColSimilarity <- NULL
+
+    for (i in 1:length(ColVector)) {
+        for (j in 1:length(ColVector)) {
+            sames <- sum(
+
+            Data[, get(ColVector[i])] == Data[, get(ColVector[j])], 
+               na.rm = T
+            )
+
+            ColSimilarity[(i - 1) * length(ColVector) + j] <- round(sames / nrow(Data), 3)
+        }
     }
-  }
 
-  out <- matrix(
-    ColSimilarity,
-    nrow = length(ColVector), 
-    ncol = length(ColVector)
-  ) %>% data.table() %>% 
-    setnames(ColVector) %>% 
-    .[, Var := ColVector] %>% 
-    setcolorder('Var') %>% 
-    .[]
-  
-  return(out)
+    out <- matrix(
+        ColSimilarity,
+        nrow = length(ColVector), 
+        ncol = length(ColVector)
+    ) %>% data.table() %>% 
+        setnames(ColVector) %>% 
+        .[, Var := ColVector] %>% 
+        setcolorder('Var') %>% 
+        .[]
+
+    return(out)
 }
-
