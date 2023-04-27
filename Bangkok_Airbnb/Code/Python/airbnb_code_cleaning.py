@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import forex_python.converter as fx
 from Bangkok_Airbnb.Code.Python.utils import *
 
 Bangkok = LoadData()
@@ -143,6 +144,23 @@ DropRows(
 )
 
 # 2.6 Sales
+SalesCols = VarDescription[VarDescription['VarGroups'] == 'Sales'].index.to_list()
+
+## 2.6.1 Price --> convert to USD
+exchange_rate = fx.CurrencyRates().get_rate(
+    base_cur = 'THB',
+    dest_cur = 'USD' 
+)
+
+Bangkok['usd_price'] = Bangkok['price'].str.replace(
+    r"\$|,",'', regex = True
+).astype('float') * exchange_rate
+
+DropCols(Bangkok, 'price')
+SalesCols.remove('price')
+
+## 2.6.1 Min/MaxNight Cols
+
 # 2.7 Availability
 # 2.8 Satisfaction
 # 2.9 Dates
