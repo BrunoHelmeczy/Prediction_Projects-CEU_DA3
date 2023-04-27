@@ -137,7 +137,10 @@ DropCols(Bangkok, 'bathrooms_text')
 PropCols.remove('bathrooms_text')
 
 ## 2.5.4 Beds/ Bedrooms / Accommodates
-
+DropRows(
+    Bangkok,
+    Bangkok[np.logical_not(Bangkok['accommodates'].between(2, 6))].index
+)
 
 # 2.6 Sales
 # 2.7 Availability
