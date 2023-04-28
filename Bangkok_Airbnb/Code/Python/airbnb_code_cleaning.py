@@ -180,6 +180,10 @@ CalcColumnSimilarity(
 DropCols(Bangkok, MaxNightCols[1:-1])
 [SalesCols.remove(x) for x in MaxNightCols[1:-1]]
 
+RemNightCols = Bangkok.columns[Bangkok.columns.str.contains('nights')]
+
+Bangkok.rename({x: f'n_{x}' for x in RemNightCols}, inplace = True)
+
 # 2.7 Availability
 
 
