@@ -82,9 +82,9 @@ DescribeVariables <- function(Data) {
     return(VarDescribe)
 }
 
-FillNAs <- function(DF, Cols = PercCols) {
+FillNAs <- function(DF, Cols = PercCols, fill_value = 0) {
     for (i in Cols) {
-        DF[is.na(get(i)), (i) := 0]
+        DF[is.na(get(i)), (i) := fill_value]
     }
     return(DF)
 }
