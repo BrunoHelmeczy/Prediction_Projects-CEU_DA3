@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import re
 import forex_python.converter as fx
 from Bangkok_Airbnb.Code.Python.utils import *
 
@@ -185,7 +186,16 @@ RemNightCols = Bangkok.columns[Bangkok.columns.str.contains('nights')]
 Bangkok.rename({x: f'n_{x}' for x in RemNightCols}, inplace = True)
 
 # 2.7 Availability
+AvailCols = VarDescription[VarDescription['VarGroups'] == 'Availability'].index
 
+Bangkok.loc[:, AvailCols] = Bangkok.filter(AvailCols).agg(
+    lambda x: int(re.sub(r'_|[a-zA-Z]', '', x.name)) - x
+)
+
+Bangkok.rename(
+    {col: f"n_sales_{re.sub(r'_|[a-zA-Z]', '', col)}" for col in AvailCols},
+    inplace = True
+)
 
 # 2.8 Satisfaction
 # 2.9 Dates
