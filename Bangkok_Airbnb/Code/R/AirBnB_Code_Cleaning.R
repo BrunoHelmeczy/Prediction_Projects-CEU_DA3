@@ -1,6 +1,7 @@
 # start <- Sys.time()
 utils_file <- list.files(pattern = 'utils.R', recursive = TRUE, full.names = TRUE)
 source(utils_file)
+options(scipen = 999)
 
 Libs <- c(
     'stargazer', 'Hmisc', 'readr', 'rattle', 'tidyverse', 
@@ -132,32 +133,14 @@ PropCols <- VarDescribe[VarGroups == 'Property', Vars]
 # Bangkok[, ..PropCols]
 
 # 2.5.1) Room Types -> Keep only 'Entire home/apt' -> Only Var.Value left -> delete Var.
-# table(Bangkok$room_type)
-
 Bangkok <- Bangkok[room_type == "Entire home/apt"] %>% 
     .[, room_type := NULL]
 
 PropCols <- PropCols[!PropCols %in% "room_type"]
 
 # 2.5.2) Property Types -> 
-table(Bangkok$property_type)
-
 # Keep only Apartments & Condominiums... 
-# Many weird names - Including hotel rooms, dorms, hostels, CASTLES & other
-# Unique / Rare data - but NOT RELEVANT FOR APARTMENT PRICING
-WierdPropTypeKeys <- c("Room","Castle","Entire cabin","chalet","dorm","hostel",
-                       "place","Farm stay","Tiny house","Treehouse","Pension",
-                       "cottage","Dome house","Earth house")
-
-Bangkok[!(property_type %in% WierdPropTypeKeys)] %>% 
-  .[, property_type := gsub('serviced |Entire ', '', property_type) %>% 
-        gsub('home/apt', 'apartment', .)
-      ] %>% 
-  .[!(property_type %in% c('apartment', 'condominium')), 
-      property_type := 'Other'] %>% 
-  .[, property_type := factor(property_type)] %>% 
-  setnames('property_type', 'f_property_type')
-
+Bangkok <- CollapsePropertyTypes(Bangkok)
 PropCols <- PropCols[!PropCols %in% "property_type"]
 
 # 2.5.3) Bathroom Text -> Bathrooms figures
@@ -172,13 +155,13 @@ PropCols <- PropCols[!PropCols %in% "bathrooms_text"]
 AccomCols <- VarDescribe[Vars %in% PropCols[-length(PropCols)], Vars]
 
 # Nr. Beds & Bedrooms dont seems to be well affected by Nr. Accomms...
-Bangkok %>% 
-  ggplot(aes(x = accommodates, y = beds)) + 
-  geom_point(position = "jitter", width = 0.0, height = 0) 
+# Bangkok %>% 
+#   ggplot(aes(x = accommodates, y = beds)) + 
+#   geom_point(position = "jitter", width = 0.0, height = 0) 
 
-Bangkok %>% 
-  ggplot(aes(x = accommodates,y = bedrooms)) + 
-  geom_point(position = "jitter", width = 0.0, height = 0) 
+# Bangkok %>% 
+#   ggplot(aes(x = accommodates,y = bedrooms)) + 
+#   geom_point(position = "jitter", width = 0.0, height = 0) 
 
 Bangkok <- Bangkok[between(accommodates, 2, 6)] %>% 
   setnames(
@@ -237,11 +220,9 @@ setnames(
   new = gsub('.+_([0-9]{2,})', 'n_sales_\\1', AvailCols)
 )
 
-
 #### 2.8) Satisfaction i.e. Reviews ####
 SatCols <- VarDescribe[VarGroups == "Satisfaction", Vars]
-
-summary(Bangkok[, ..SatCols]) # Similar number of NAs in Review_Scores
+# summary(Bangkok[, ..SatCols]) # Similar number of NAs in Review_Scores
 
 # Check if missing for same rows
 data.table(
@@ -265,9 +246,9 @@ SatCols <- SatCols[!(SatCols %in% SubReviews)]
 
 # 2.8.2) Review Frequency -> Grand scheme of things - 
 # ONLY total Reviews & Reviews/Month of interest
-Bangkok[SatCols[3:4]] <- NULL
+Bangkok[, (SatCols[3:4]) := NULL]
 SatCols <- SatCols[!SatCols %in% SatCols[3:4]]
-summary(Bangkok[SatCols])
+# summary(Bangkok[, ..SatCols])
 
 # 2.8.3) Inpute NAs for Revs/Month & Rev Score
 Bangkok[, keyby = number_of_reviews, mean(review_scores_rating, na.rm = TRUE)]
@@ -296,158 +277,29 @@ setnames(
 # 2 time-related infor of interest:
 # 1st How long has property had visitors -> time since first review -> best proxy available
 # 2nd Low long since last time it had visitors -> time since last review -> best proxy available
-DateVars <- VarDescribe[VarType == "Date","Vars"]
+DateVars <- VarDescribe[VarType == "Date", Vars]
 
-# Rest of date-related data not relevant
-Bangkok <- Bangkok %>% 
-  mutate(n_days_since_1st = as.numeric(as.Date(calendar_last_scraped,format="%Y-%m-%d") -
-                                         as.Date(first_review ,format="%Y-%m-%d")),
-         n_days_since_last = as.numeric(as.Date(calendar_last_scraped,format="%Y-%m-%d") -
-                                          as.Date(last_review ,format="%Y-%m-%d"))) %>% 
-  dplyr::select(-c(calendar_last_scraped,first_review,last_review, host_since))
+Bangkok[, `:=` (
+  n_days_since_1st = as.numeric(calendar_last_scraped - first_review),
+  n_days_since_last = as.numeric(calendar_last_scraped - last_review)
+)]
 
+Bangkok[, (DateVars) := NULL]
 
-colnames(Bangkok)
-
-#### 2.10) Dummies from Amenities ####
-Bangkok$amenities <- as.list(strsplit(gsub("\\[","",
-                                           gsub("\\]","",
-                                                gsub('\\"',"",
-                                                     gsub("\\}","",
-                                                          gsub("\\{","",
-                                                               Bangkok$amenities))))),","))
-
-
-# 2.10.1) get vector of raw factor levels & Dataframe of dummies if in level 
-Levels <- levels(factor(unlist(Bangkok$amenities)))
-DummyTable <- as.data.frame(do.call(rbind, lapply(lapply(Bangkok$amenities, factor, Levels), table)))
-#colnames(DummyTable) <- paste0("d_",trimws(colnames(DummyTable)))
-
-# 2.10.2) Function to reduce feature space
-#   grep function -> find colnames which are substring of keyword
-#   Define New Column with correct name <- ifelse(any(subsetted columns == 1),1,0)
-#   Delete subsetted columns
-#   Keywords thought by eyeballing: Wifi, HDTV, Dedicated WorkSpace, Aro Conditioner
-test <- DummyTable
-keywords <- c("wifi|ethernet","HDTV|TV","Dedicated.*Workspace",
-              "Paid.*Parking|Paid.*Garage","Free.*Parking|Free.*Garage",
-              "Clothing.*Storage","Refrigerator",
-              "Fitness|Gym|Sauna|Hot.*tub|Pool|bath.*tub",
-              "stove","Sound.*System","shampoo|conditioner|soap|shower.*gel",
-              "hot.*water","Washer","air.*condition",
-              "Smart.*Lock|Smoke.*Alarm|Safe|Lockbox",
-              "Dryer", "Kitchen","Oven","Heater",
-              "Children|Baby|crib","Microwave","garden","breakfast")
-
-
-CoerceDummiesAdvanced <- function(df_w_Dummies, keywords_Vector) {
-  NewColName <- NULL
-  for (j in 1:length(keywords_Vector)) {
-    print(paste0("Coercing columns including keyword Nr. ",j,": ", keywords_Vector[j]))
-    
-    #-----------------------------
-    # Finding Columns
-    ColMatchestest <- df_w_Dummies %>% dplyr::select(matches(keywords_Vector[j])) %>% colnames()
-    NewColName[j] <- unlist(str_split(keywords_Vector[j],"\\|"))[1]
-    
-    #---------------------------------  
-    # Coercing Columns
-    print(paste0(length(ColMatchestest)," matching Columns were found!!!"))
-    NewColl <- NULL
-    for (i in 1:nrow(df_w_Dummies)) {
-      NewColl[i] <- ifelse(any(df_w_Dummies[i,ColMatchestest] == 1),1,0)
-    }
-    
-    df_w_Dummies[ColMatchestest] <- NULL
-    df_w_Dummies <- cbind(df_w_Dummies, NewColl)
-    
-    colnames(df_w_Dummies)[length(colnames(df_w_Dummies))] <- paste0("d_",NewColName[j])
-  }
-  return(df_w_Dummies)
-}
-
-PostKeywords <- CoerceDummiesAdvanced(test, keywords)
-
-# 2.10.3) Check remaining Duplicates
-colnames(PostKeywords) <- trimws(colnames(PostKeywords))
-Dups <- colnames(PostKeywords)[which(duplicated(colnames(PostKeywords)))]
-
-# Function with same purpose but uses different subsetting - that allows duplicate columns
-CoerceDummyVarColumns <- function(df_w_Dummies,Keywords_Vector, SplitStrings = T) {
-  for (j in 1:length(Keywords_Vector)) {
-    print(paste0("Coercing columns including keyword Nr. ",j,": ", Keywords_Vector[j]))
-    
-    if (SplitStrings == T) {
-      # For 2+ word case -> split the string -> find all matches per splitted-string -> found in all = real match
-      subwords <- trimws(unlist(str_split(Keywords_Vector[j]," ")))
-      
-      if (length(subwords) > 1) {
-        matches <- list()
-        
-        # fill list w matching column names' Col Nrs. for each subword
-        for (k in 1:length(subwords)) {
-          matches[[k]] <- grep(tolower(subwords[k]),tolower(colnames(df_w_Dummies)))
-        }
-        # look for ColNumbers of shorter list in longer List -> 4 equal length doesnt matter
-        if (length(matches[[1]]) >= length(matches[[2]])) {
-          # Case when 1st list is longer
-          ColMatchestest <- matches[[1]][matches[[1]] %in% matches[[2]]]
-        } else {
-          # Case when 2nd list is longer 
-          ColMatchestest <- matches[[2]][matches[[2]] %in% matches[[1]]]
-        }  
-      } else {
-        # 1 word case
-        #  ColMatches <- grep(tolower(keywords[j]),tolower(colnames(DummyTable)))
-        ColMatchestest <- grep(tolower(Keywords_Vector[j]),tolower(colnames(df_w_Dummies)))
-      }
-      
-    } else {
-      # 1 word case
-      #  ColMatches <- grep(tolower(keywords[j]),tolower(colnames(DummyTable)))
-      ColMatchestest <- grep(tolower(Keywords_Vector[j]),tolower(colnames(df_w_Dummies)))
-    } 
-    
-    print(paste0(length(ColMatchestest)," matching Columns were found!!!"))
-    
-    NewColl <- NULL
-    for (i in 1:nrow(df_w_Dummies)) {
-      NewColl[i] <- ifelse(any(df_w_Dummies[i,ColMatchestest] == 1),1,0)
-    }
-    
-    df_w_Dummies[ColMatchestest] <- NULL
-    df_w_Dummies <- cbind(df_w_Dummies, NewColl)
-    
-    colnames(df_w_Dummies)[length(colnames(df_w_Dummies))] <- paste0("d_",Keywords_Vector[j])
-    
-  }
-  return(df_w_Dummies)
-}
-
-DupsRemoved <- CoerceDummyVarColumns(PostKeywords,Dups,SplitStrings = F)
-colnames(DupsRemoved) <- gsub("[^[:alnum:]_]","_",colnames(DupsRemoved))
-
-# 2.10.4) Find & Remove Dummy Cols w VERY few Trues -> say < 1% TRUE = 1
-ManyFalses <- Dummies_w_Many_Falses(DupsRemoved)
-DupsRemoved[ManyFalses$Colname] <- NULL
-
-# 2.10.5) Add back to df for final datatable
-Bangkok <- cbind(Bangkok,DupsRemoved)
-Bangkok$amenities <- NULL
-#### Renaming ####
-
+#### 2.10) Amenities ####
+Bangkok <- AddAmenitiesCols(Bangkok)
 
 # Start all varnames w l_,d_,n_,flag_,p_,usd_
-oldnames <- Bangkok %>% dplyr::select(-matches("^l_.*|^d_.*|^n_.*|^flag_.*|^f_.*|^p_.*|^usd_.*")) %>% colnames()
-torename <- match(oldnames,colnames(Bangkok))
+torename <- grep("^l_.*|^d_.*|^n_.*|^flag_.*|^f_.*|^p_.*|^usd_.*", names(Bangkok), value = TRUE, invert = TRUE)
 
-colnames(Bangkok)[torename] <- paste0("d_",oldnames)
+setnames(
+  Bangkok,
+  old = torename,
+  new = paste0('d_', torename)
+)
 
 #### Save Files ####
-CleanDataPath <- paste0(getwd(),"/Prediction_Projects-CEU_DA3/Bangkok_Airbnb/Data/Clean/")
-# CSV & RDS
-write_csv(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.csv"))
-saveRDS(Bangkok,paste0(CleanDataPath,"airbnb_bangkok_cleaned.rds"))
+StoreData(Data = Bangkok, type = 'Clean')
 
 
 df <- Bangkok
