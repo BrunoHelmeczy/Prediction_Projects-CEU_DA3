@@ -239,26 +239,29 @@ setnames(
 
 
 #### 2.8) Satisfaction i.e. Reviews ####
-SatCols <- VarDescribe[VarGroups == "Satisfaction","Vars"]
+SatCols <- VarDescribe[VarGroups == "Satisfaction", Vars]
 
-summary(Bangkok[SatCols]) # Similar number of NAs in Review_Scores
+summary(Bangkok[, ..SatCols]) # Similar number of NAs in Review_Scores
 
 # Check if missing for same rows
-rowNum <- 1:nrow(Bangkok)
-CountNAs <- rowSums(is.na(Bangkok[SatCols]))
-data.frame(rowNum,CountNAs) %>% group_by(CountNAs) %>% 
-  summarize(RowCount = n())
+data.table(
+  id  = 1:nrow(Bangkok),
+  NAs = rowSums(is.na(Bangkok[, ..SatCols]))
+) %>%
+  .[, keyby = NAs, .N]
 # Of ca. 3530 rows w NAs 3418 has all NAs -> 
 
 # 2.8.1) Review Scores
-summary(Bangkok[SatCols][8:13]) 
+SubReviews <- grep('review_scores', SatCols, value = TRUE)[-1]
+# summary(Bangkok[, ..SubReviews])
+
 # review score rating aggregate of 6 sub-categories
 # Cats: Accuracy, Cleanliness, Check-in, Communication, Location, Value
 # Seems important for guest satisfaction analysis -> TOO MUCH detail for overall pricing
 # +1s: Location & Perceived-value information inside amenities, neighborhood
 # DROP SUB-CATEGORIES
-Bangkok[SatCols[8:13]]  <- NULL
-SatCols <- SatCols[!SatCols %in% SatCols[8:13]]
+Bangkok[, (SubReviews) := NULL]
+SatCols <- SatCols[!(SatCols %in% SubReviews)]
 
 # 2.8.2) Review Frequency -> Grand scheme of things - 
 # ONLY total Reviews & Reviews/Month of interest
@@ -267,24 +270,27 @@ SatCols <- SatCols[!SatCols %in% SatCols[3:4]]
 summary(Bangkok[SatCols])
 
 # 2.8.3) Inpute NAs for Revs/Month & Rev Score
-Bangkok[SatCols] %>% 
-  group_by(number_of_reviews) %>% 
-  summarize(mean(review_scores_rating))
+Bangkok[, keyby = number_of_reviews, mean(review_scores_rating, na.rm = TRUE)]
 
 # 0 Revs -> 0 Revs/month + flag var
-Bangkok$flag_reviews_per_month <- ifelse(is.na(Bangkok$reviews_per_month), 1,0)
-Bangkok$reviews_per_month <- ifelse(is.na(Bangkok$reviews_per_month), 0, Bangkok$reviews_per_month )
+Bangkok[, flag_reviews_per_month := as.numeric(is.na(reviews_per_month))] %>%
+  FillNAs(Cols = 'reviews_per_month')
 
 # 0 Reviews -> Mean Rev.Score + flag var
 # More sensitive to outliers BUT -> No reviews means added uncertainty for guests
-Bangkok$flag_review_scores_rating <- ifelse(is.na(Bangkok$review_scores_rating),1,0)  
-Bangkok$review_scores_rating <- ifelse(is.na(Bangkok$review_scores_rating),
-                                       mean(Bangkok$review_scores_rating,na.rm = T),
-                                       Bangkok$review_scores_rating )
+Bangkok[, flag_review_scores_rating := as.numeric(is.na(review_scores_rating))] %>%
+  FillNAs(
+    Cols = 'review_scores_rating',
+    fill_value = mean(Bangkok$review_scores_rating, na.rm = T)
+  )
 
-Bangkok <- Bangkok %>% rename(n_number_of_reviews = number_of_reviews,
-                              n_review_scores_rating = review_scores_rating,
-                              n_reviews_per_month = reviews_per_month)
+Cols <- c('number_of_reviews' , 'review_scores_rating' , 'reviews_per_month')
+
+setnames(
+  Bangkok,
+  old = Cols,
+  new = paste0('n_', Cols)
+)
 
 #### 2.9) Date Vars ####
 # 2 time-related infor of interest:
