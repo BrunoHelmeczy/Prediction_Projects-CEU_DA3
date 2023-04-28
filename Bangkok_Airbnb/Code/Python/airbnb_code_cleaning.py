@@ -160,8 +160,29 @@ DropCols(Bangkok, 'price')
 SalesCols.remove('price')
 
 ## 2.6.1 Min/MaxNight Cols
+MinNightCols = [col for col in SalesCols if col.find('minimum_nights') != -1]
+
+CalcColumnSimilarity(
+    Data = Bangkok,
+    ColumnList = MinNightCols
+)
+
+DropCols(Bangkok, MinNightCols[1:])
+
+[SalesCols.remove(x) for x in MinNightCols[1:]]
+
+MaxNightCols = [col for col in SalesCols if col.find('maximum_nights') != -1]
+CalcColumnSimilarity(
+    Data = Bangkok,
+    ColumnList = MaxNightCols
+)
+
+DropCols(Bangkok, MaxNightCols[1:-1])
+[SalesCols.remove(x) for x in MaxNightCols[1:-1]]
 
 # 2.7 Availability
+
+
 # 2.8 Satisfaction
 # 2.9 Dates
 # 2.10 Amentities
