@@ -20,7 +20,7 @@ DropCols(Bangkok, IDcols)
 DropRows(VarDescription, IDcols)
 
 # 2.2 logicals --> convert to ints
-LogicCols = ['host_is_superhost', 'host_has_profile_pic', 'host_identity_verified', 'has_availability', 'instant_bookable']
+LogicCols = DetectBooleans(Bangkok)
 
 convertBooleans(
     Data = Bangkok, 
@@ -198,8 +198,59 @@ Bangkok.rename(
 )
 
 # 2.8 Satisfaction
+SatCols = VarDescription[VarDescription['VarGroups'] == 'Satisfaction'].index
+
+Bangkok.loc[:, SatCols].isna().sum(axis = 1).value_counts()
+
+SubReviews = SatCols[SatCols.str.contains('review_scores')].to_list()[1:]
+
+DropCols(Bangkok, SubReviews)
+DropCols(Bangkok, SatCols[2:4])
+
+SatCols = SatCols.difference(SatCols[2:4])
+
+Bangkok.groupby('number_of_reviews', as_index = False) \
+    .agg(Avg_ReviewScore = ('review_scores_rating', np.mean))
+
+Bangkok['flag_reviews_per_month'] = Bangkok['reviews_per_month'].isna()
+Bangkok['reviews_per_month'].fillna(0, inplace = True)
+
+Bangkok['flag_review_scores_rating'] = Bangkok['review_scores_rating'].isna()
+Bangkok['review_scores_rating'].fillna(
+    value = Bangkok['review_scores_rating'].mean(), 
+    inplace = True
+)
+
+Cols = ['number_of_reviews' , 'review_scores_rating' , 'reviews_per_month']
+
+Bangkok.rename(
+    {col: f"n_{col}" for col in Cols},
+    inplace = True
+)
+
 # 2.9 Dates
+DateVars = VarDescription[VarDescription['VarType'] == 'Date'].index
+
+ReviewCols = [x for x in DateVars if x.find('review') != -1]
+
+Bangkok.loc[:, ReviewCols] = Bangkok.filter(ReviewCols).agg(
+    func = lambda x: (Bangkok['calendar_last_scraped'] - x).dt.days
+)
+
+Bangkok.rename(
+    mapper = {col: f'''n_days_since_{
+                col.replace(r'review', '').replace('_', '').replace('fir', '1')
+            }''' for col in ReviewCols},
+    inplace = True
+)
+
+DropCols(Bangkok, DateVars)
+
 # 2.10 Amentities
+Bangkok = AddAmenitiesCols(Bangkok)
+
+
+
 
 # 3) Cleaning script up
     
