@@ -38,7 +38,7 @@ StoreData <- function(Data, cwd = getActiveProject(), type = 'Raw') {
     cat(outmessage)
 }
 
-# 2) Cleaning
+# 2) Cleaning Utils
 DropUnusedCols <- function(Data) {
     #### 1) Delete URLs & Text datas
     drops <- c("host_thumbnail_url","host_picture_url",
@@ -115,7 +115,6 @@ CalcColumnSimilarity <- function(Data, ColVector) {
     return(out)
 }
 
-# df <- Bangkok
 CollapsePropertyTypes <- function(df) {
   WierdPropTypeKeys <- c("Room","Castle","Entire cabin","chalet","dorm","hostel",
                         "place","Farm stay","Tiny house","Treehouse","Pension",
@@ -155,7 +154,6 @@ CoerceDummies2023 <- function(df_w_Dummies, keywords_Vector) {
     return(df_w_Dummies[, ..cols_out])
 }
 
-# df <- Bangkok
 AddAmenitiesCols <- function(df) {
     df[, amenities := gsub('\\[|\\]|\\"|\\}|\\{', '', amenities) %>%
         strsplit(',') %>% 
@@ -194,3 +192,28 @@ AddAmenitiesCols <- function(df) {
 
     return(out)
 }
+
+# Cleaning Steps Helpers
+
+# convert logicals
+# delete id columns
+# clean host info
+    # percentize host resp/acceptance rate cols
+    # get nr verifications
+    # clean host_neighbourhood
+    # keep host listings cound
+# drop geospatial_cols
+# clean property info
+    # room_type == "Entire home/apt"
+    # CollapsePropertyTypes()
+    # clean n_bathrooms + accommodates 2-6
+# sales
+    # price
+    # stay restrictions
+    # availability
+# satisfaction
+    # remove subreviews
+    # NA inpute nr reviews + review score
+# dates
+    # calc days since columns
+# amenities --> DONE

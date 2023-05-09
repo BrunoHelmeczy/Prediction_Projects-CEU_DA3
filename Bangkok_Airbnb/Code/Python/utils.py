@@ -52,7 +52,6 @@ def DropUnusedCols(Data):
 
     Data.drop(NAcols, inplace = True, axis = 1, errors = 'ignore')
 
-# Data = Bangkok
 def DescribeVariables(Data):
     VarGroups = [
         ['IDs'] * 4
@@ -135,6 +134,22 @@ def convertBooleans(Data, Cols):
         inplace = True
     )
 
+def CoerceDummies(Data, keywords):
+    for kw in keywords:
+        ColMatchesTest = Data.columns[Data.columns.str.lower().str.contains(kw.lower(), regex = True)]
+        NewColName = pd.Series(kw).str.replace(r'\|.+', '', regex = True).to_list()[0]
+
+        Data[NewColName] = Data.loc[:, ColMatchesTest].agg(
+            lambda x: int(sum(x) > 0)
+            , axis = 1
+        )
+
+        DropCols(Data, ColMatchesTest)
+    
+    cols_out = Data.columns[Data.mean() > 0.01]
+
+    return Data.loc[:, cols_out]
+
 def AddAmenitiesCols(Data):
     Data['amenities'] = Data['amenities'].str.replace(r'\[|\]|\"|\{|\}', '', regex = True) \
         .str.split(',') \
@@ -176,19 +191,27 @@ def AddAmenitiesCols(Data):
 
     return out
 
-def CoerceDummies(Data, keywords):
-    for kw in keywords:
-        ColMatchesTest = Data.columns[Data.columns.str.lower().str.contains(kw.lower(), regex = True)]
-        NewColName = pd.Series(kw).str.replace(r'\|.+', '', regex = True).to_list()[0]
+# Cleaning Steps Helpers
 
-        Data[NewColName] = Data.loc[:, ColMatchesTest].agg(
-            lambda x: int(sum(x) > 0)
-            , axis = 1
-        )
-
-        DropCols(Data, ColMatchesTest)
-    
-    cols_out = Data.columns[Data.mean() > 0.01]
-
-    return Data.loc[:, cols_out]
-
+# convert logicals
+# delete id columns
+# clean host info
+    # percentize host resp/acceptance rate cols
+    # get nr verifications
+    # clean host_neighbourhood
+    # keep host listings cound
+# drop geospatial_cols
+# clean property info
+    # room_type == "Entire home/apt"
+    # CollapsePropertyTypes()
+    # clean n_bathrooms + accommodates 2-6
+# sales
+    # price
+    # stay restrictions
+    # availability
+# satisfaction
+    # remove subreviews
+    # NA inpute nr reviews + review score
+# dates
+    # calc days since columns
+# amenities --> DONE
