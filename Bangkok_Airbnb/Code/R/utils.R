@@ -96,9 +96,7 @@ CalcColumnSimilarity <- function(Data, ColVector) {
         for (j in 1:length(ColVector)) {
             sames <- sum(
 
-            Data[, get(ColVector[i])] == Data[, get(ColVector[j])], 
-               na.rm = T
-            )
+            Data[, get(ColVector[i])] == Data[, get(ColVector[j])], na.rm = T)
 
             ColSimilarity[(i - 1) * length(ColVector) + j] <- round(sames / nrow(Data), 3)
         }
@@ -159,40 +157,40 @@ CoerceDummies2023 <- function(df_w_Dummies, keywords_Vector) {
 
 # df <- Bangkok
 AddAmenitiesCols <- function(df) {
-  df[, amenities := gsub('\\[|\\]|\\"|\\}|\\{', '', amenities) %>%
-    strsplit(',') %>% 
-    lapply(trimws)] %>%
-    .[, id := .I]
+    df[, amenities := gsub('\\[|\\]|\\"|\\}|\\{', '', amenities) %>%
+        strsplit(',') %>% 
+        lapply(trimws)] %>%
+        .[, id := .I]
 
-  # 2.10.1) get vector of raw factor levels & Dataframe of dummies if in level 
-  DummyTable <- df[, keyby = id, rbindlist(list(amenities)) ] %>%
-    .[, value := 1] %>%
-    dcast(id ~ V1, value.var = 'value', fill = 0)
+    # 2.10.1) get vector of raw factor levels & Dataframe of dummies if in level 
+    DummyTable <- df[, keyby = id, rbindlist(list(amenities)) ] %>%
+        .[, value := 1] %>%
+        dcast(id ~ V1, value.var = 'value', fill = 0)
 
-  DummyTable %>%
-    setnames(
-      names(DummyTable) %>% gsub('[^0-9a-zA-Z]', '_', .) %>% paste0('d_', .)
-    )
+    DummyTable %>%
+        setnames(
+        names(DummyTable) %>% gsub('[^0-9a-zA-Z]', '_', .) %>% paste0('d_', .)
+        )
 
   # 2.10.2) Function to reduce feature space
-  keywords <- c("wifi|ethernet","HDTV|TV","Dedicated.*Workspace",
-                "Paid.*Parking|Paid.*Garage","Free.*Parking|Free.*Garage",
-                "Clothing.*Storage","Refrigerator",
-                "Fitness|Gym|Sauna|Hot.*tub|Pool|bath.*tub",
-                "stove","Sound.*System","shampoo|conditioner|soap|shower.*gel",
-                "hot.*water","Washer","air.*condition",
-                "Smart.*Lock|Smoke.*Alarm|Safe|Lockbox",
-                "Dryer", "Kitchen","Oven","Heater",
-                "Children|Baby|crib","Microwave","garden","breakfast")
+    keywords <- c("wifi|ethernet","HDTV|TV","Dedicated.*Workspace",
+                    "Paid.*Parking|Paid.*Garage","Free.*Parking|Free.*Garage",
+                    "Clothing.*Storage","Refrigerator",
+                    "Fitness|Gym|Sauna|Hot.*tub|Pool|bath.*tub",
+                    "stove","Sound.*System","shampoo|conditioner|soap|shower.*gel",
+                    "hot.*water","Washer","air.*condition",
+                    "Smart.*Lock|Smoke.*Alarm|Safe|Lockbox",
+                    "Dryer", "Kitchen","Oven","Heater",
+                    "Children|Baby|crib","Microwave","garden","breakfast")
 
-  PostKeywords <- CoerceDummies2023(DummyTable, keywords)
+    PostKeywords <- CoerceDummies2023(DummyTable, keywords)
 
-  # 2.10.5) Add back to df for final datatable
-  out <- df %>%
-    merge(PostKeywords, all.x = TRUE, by.x = 'id', by.y = 'd_id') %>% 
-    FillNAs(Cols = names(PostKeywords)[-1]) %>% 
-    .[, amenities := NULL] %>%
-    .[, id := NULL]
+    # 2.10.5) Add back to df for final datatable
+    out <- df %>%
+        merge(PostKeywords, all.x = TRUE, by.x = 'id', by.y = 'd_id') %>% 
+        FillNAs(Cols = names(PostKeywords)[-1]) %>% 
+        .[, amenities := NULL] %>%
+        .[, id := NULL]
 
-  return(out)
+    return(out)
 }

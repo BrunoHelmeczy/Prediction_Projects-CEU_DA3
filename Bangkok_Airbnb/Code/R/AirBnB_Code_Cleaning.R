@@ -230,6 +230,7 @@ data.table(
   NAs = rowSums(is.na(Bangkok[, ..SatCols]))
 ) %>%
   .[, keyby = NAs, .N]
+
 # Of ca. 3530 rows w NAs 3418 has all NAs -> 
 
 # 2.8.1) Review Scores
@@ -301,6 +302,7 @@ setnames(
 #### Save Files ####
 StoreData(Data = Bangkok, type = 'Clean')
 
+### DONE 'til here 
 
 df <- Bangkok
 
