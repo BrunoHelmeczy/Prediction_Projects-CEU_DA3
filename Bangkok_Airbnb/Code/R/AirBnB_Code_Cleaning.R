@@ -23,79 +23,22 @@ system.time({
         convertBooleans() %>%
         dropIDs() %>% 
         coerceCols2Prct() %>% 
-        countHostVerifications()
-}) # 1s
+        countHostVerifications() %>%
+        standardizeHostNeighborhood() %>%
+        dropDupeListingCols()
+}) # 1.1s
 
 #### 2.3) Host Info (ex. Logicals )  ####
-# Host_Cols <- VarDescribe[VarGroups == "Host" & VarType != 'logical', Vars]
-Host_Cols <- getHostCols()
-
-# 2.3.1) Response- & Acceptance Rate -> Remove % sign, coerce to Numeric & annotate w. "p_"
-# PercCols <- c("host_response_rate","host_acceptance_rate")
-# PercCols <- getHostPercCols()
-
-
-# Remove from Host Var list to handle
-Host_Cols <- Host_Cols[which(!Host_Cols %in% c("host_response_rate","host_acceptance_rate"))]
-
-Host_Cols
-
-# 2.3.2) Host Verifications -> Could be dummytables, but... 
-# Nr. of Verifications seem more important, so...
-# host_verifications: list of objects indicating host are not scammers
-# the more the better & any single verifier is not in itself significant 
+Host_Cols <- getHostCols()[which(!getHostCols() %in% getHostPercCols())]
 
 # 2.3.3) Host Neighborhood 
-# where host comes from might be relevant -> should be factored 
-Bangkok[, host_neighbourhood := factor(trimws(gsub(
-    '[0-9]|Lower|Upper', '', 
-    host_neighbourhood)))]
-
-HostCityFreq <- Bangkok[!is.na(host_neighbourhood), keyby = host_neighbourhood, .N] %>% 
-    .[order(-N)] %>% 
-    .[, total := sum(N)] %>% 
-    .[, cumsum := cumsum(N)] %>% 
-    .[, cumsumprct := cumsum / total]
-
-# outside top3 > 3% of data / value -> 'Other'
-top3hostcities <- HostCityFreq[1:3, host_neighbourhood]
-
-Bangkok[!(host_neighbourhood %in% top3hostcities), host_neighbourhood := 'Other']
 
 # Remove from Host Var list
 Host_Cols <- Host_Cols[which(!Host_Cols %in% c("host_verifications","host_neighbourhood"))]
 
 # 2.3.4) Host Listings infos -> Seems similar to CalcListings Data 
-ListingCols <- c(
-    grep("listing", Host_Cols, value = T),
-    VarDescribe[VarGroups == 'CalcListings', Vars]
-)
+ListingCols <- getListingsCols()
 
-# Summing occurrences where they're unequal = 0 -> Delete 1
-NrDiff <- sum(
-    Bangkok[, get(ListingCols[1])] != Bangkok[, get(ListingCols[2])]
-    , na.rm = TRUE
-) # equals 0
-
-Bangkok[, (ListingCols[2]) := NULL]
-
-ListingCols <- ListingCols[-2]
-# Compare each Listing Column -> count where values arent equal
-CalcColumnSimilarity(
-    Data = Bangkok,
-    ColVector = ListingCols
-)
-
-# Substantively -> No reason to believe listing counts affect price
-# Pricing market driven, not profit / cash-flow needs-based, so inventory should not affect prices
-# keep 1 Var, no need for further detail
-Bangkok[, (ListingCols[2:5]) := NULL]
-
-setnames(
-    Bangkok,
-    old = 'host_listings_count',
-    new = 'n_host_listings_count'
-)
 
 # TODO: DATES a seperate Matter 
 
