@@ -4,63 +4,46 @@ source(utils_file)
 options(scipen = 999)
 
 Libs <- c(
-    'stargazer', 'Hmisc', 'readr', 'rattle', 'tidyverse', 
+    'stargazer', 'Hmisc', 'readr', 'rattle', 'tidyverse', 'arrow',
     'caret', 'ranger', 'Hmisc', 'knitr', 'kableExtra', 'rstudioapi',
     'xtable', 'data.table', 'stringr', 'dplyr', 'plotly', 'quantmod'
 )
 
 LoadLibraries(LibsVector = Libs)
 
-Bangkok <- LoadData()
-StoreData(Data = Bangkok)
-
-# difftime(Sys.time(), start, units = 'secs')
+system.time(
+    Bangkok <- LoadData()
+)
 
 #### CLEANING  ####
-Bangkok <- DropUnusedCols(Bangkok)
+system.time({
+    VarDescribe <- DescribeVariables(Bangkok)
 
-#### 2) Group Vars by Topic -> Clean by Topic ####
-VarDescribe <- DescribeVariables(Bangkok)
-
-# 2.1) Logicals -> Numeric + prepend 'l_'
-Logic_Cols <- VarDescribe[VarType == 'logical', Vars]
-Bangkok[, ..Logic_Cols] %>% head()
-Bangkok[, (Logic_Cols) := lapply(.SD, as.numeric), .SDcols = Logic_Cols] %>% 
-    setnames(
-        old = Logic_Cols, 
-        new = paste0("l_",Logic_Cols)
-    )
-
-# 2.2) IDs -> Delete (No modelling purpose) 
-ID_Cols <- VarDescribe[VarGroups == "IDs", Vars]
-Bangkok[, (ID_Cols) := NULL]
+    Bangkok <- Bangkok %>%
+        convertBooleans() %>%
+        dropIDs() %>% 
+        coerceCols2Prct() %>% 
+        countHostVerifications()
+}) # 1s
 
 #### 2.3) Host Info (ex. Logicals )  ####
-Host_Cols <- VarDescribe[VarGroups=="Host" & VarType != 'logical', Vars]
-# Bangkok[, ..Host_Cols] %>% head()
+# Host_Cols <- VarDescribe[VarGroups == "Host" & VarType != 'logical', Vars]
+Host_Cols <- getHostCols()
 
 # 2.3.1) Response- & Acceptance Rate -> Remove % sign, coerce to Numeric & annotate w. "p_"
-PercCols <- c("host_response_rate","host_acceptance_rate")
+# PercCols <- c("host_response_rate","host_acceptance_rate")
+# PercCols <- getHostPercCols()
 
-Bangkok[, (PercCols) := lapply(.SD, function(x) {
-    gsub('%', '', x) %>% as.numeric()
-}), .SDcols = PercCols] %>% 
-    FillNAs(PercCols) %>% 
-    setnames(
-        old = PercCols,
-        new = paste0('p_', PercCols)
-    )
 
 # Remove from Host Var list to handle
 Host_Cols <- Host_Cols[which(!Host_Cols %in% c("host_response_rate","host_acceptance_rate"))]
+
+Host_Cols
 
 # 2.3.2) Host Verifications -> Could be dummytables, but... 
 # Nr. of Verifications seem more important, so...
 # host_verifications: list of objects indicating host are not scammers
 # the more the better & any single verifier is not in itself significant 
-Bangkok[, id := .I] %>% 
-    .[, keyby = id, n_host_verifications := length(str_split(host_verifications, ', ')[[1]])] %>% 
-    .[, (c('id', 'host_verifications')) := NULL]
 
 # 2.3.3) Host Neighborhood 
 # where host comes from might be relevant -> should be factored 
@@ -153,15 +136,6 @@ PropCols <- PropCols[!PropCols %in% "bathrooms_text"]
 
 # 2.5.4) Beds / Bedrooms / Accommodates -> Accomms 2-6 pax
 AccomCols <- VarDescribe[Vars %in% PropCols[-length(PropCols)], Vars]
-
-# Nr. Beds & Bedrooms dont seems to be well affected by Nr. Accomms...
-# Bangkok %>% 
-#   ggplot(aes(x = accommodates, y = beds)) + 
-#   geom_point(position = "jitter", width = 0.0, height = 0) 
-
-# Bangkok %>% 
-#   ggplot(aes(x = accommodates,y = bedrooms)) + 
-#   geom_point(position = "jitter", width = 0.0, height = 0) 
 
 Bangkok <- Bangkok[between(accommodates, 2, 6)] %>% 
   setnames(
