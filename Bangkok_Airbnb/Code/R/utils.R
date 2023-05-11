@@ -8,7 +8,6 @@ LoadLibraries <- function(LibsVector) {
     }))
 }
 
-
 getDataStoragePath <- function(cwd = getActiveProject(), type = 'Raw') {
     DataFolder <- grep(type, list.dirs(recursive = TRUE, full.names = FALSE), value = TRUE)
     StoragePath <- paste0(c(gsub('^/', '', cwd), DataFolder, ''), collapse = '/')
@@ -219,7 +218,7 @@ AddAmenitiesCols <- function(df) {
 
 # Cleaning Steps Helpers
 
-# convert logicals
+# 1) convert logicals
 getBooleanCols <- function() {
     c("host_is_superhost", "host_has_profile_pic", "host_identity_verified", 
         "has_availability", "instant_bookable"
@@ -234,7 +233,7 @@ convertBooleans <- function(dt, cols = getBooleanCols()) {
         )
 }
 
-# delete id columns
+# 2) delete id columns
 getIDCols <- function() {
     c("id" , "scrape_id" , "host_id" , "host_name")
 }
@@ -243,7 +242,7 @@ dropIDs <- function(dt, cols = getIDCols()) {
     dt[, (cols) := NULL]
 }
 
-# clean host info
+# 3) clean host info
 getHostCols <- function() {
     c(
         "host_since"
@@ -259,7 +258,7 @@ getHostCols <- function() {
     )
 }
 
-    # percentize host resp/acceptance rate cols
+# 3.1) percentize host resp/acceptance rate cols
 getHostPercCols <- function() {c("host_response_rate","host_acceptance_rate")}
 
 coerceCols2Prct <- function(dt, cols = getHostPercCols()) {
@@ -273,17 +272,67 @@ coerceCols2Prct <- function(dt, cols = getHostPercCols()) {
         )
 }
 
-    # get nr verifications
+# 3.2) get nr verifications
 countHostVerifications <- function(dt) {
     dt[, id := .I] %>% 
         .[, keyby = id, n_host_verifications := length(str_split(host_verifications, ', ')[[1]])] %>% 
         .[, (c('id', 'host_verifications')) := NULL]
 }
 
-    # clean host_neighbourhood
-    # keep host listings cound
-# drop geospatial_cols
-# clean property info
+# 3.3) clean host_neighbourhood
+standardizeHostNeighborhood <- function(dt, top_n_cities = 3) {
+    # outside top3 > 3% of data / value -> 'Other'
+    dt[, host_neighbourhood := factor(trimws(gsub(
+        '[0-9]|Lower|Upper', '', 
+        host_neighbourhood)))]
+
+    HostCityFreq <- dt[!is.na(host_neighbourhood), keyby = host_neighbourhood, .N] %>% 
+        .[order(-N)] %>% 
+        .[, total := sum(N)] %>% 
+        .[, cumsum := cumsum(N)] %>% 
+        .[, cumsumprct := cumsum / total]
+
+    topNhostcities <- HostCityFreq[1:top_n_cities, host_neighbourhood]
+
+    dt[!(host_neighbourhood %in% topNhostcities), host_neighbourhood := 'Other']
+}
+
+# 3.4) keep host_listings_count only
+getListingsCols <- function() {
+    c(
+        "host_listings_count"
+        , "host_total_listings_count"
+        , "calculated_host_listings_count"
+        , "calculated_host_listings_count_entire_homes"
+        , "calculated_host_listings_count_private_rooms"
+        , "calculated_host_listings_count_shared_rooms"
+    )
+}
+
+dropDupeListingCols <- function(dt, cols = getListingsCols()) {
+    # Substantively -> No reason to believe listing counts affect price
+    # Pricing market driven, not profit / cash-flow needs-based, so inventory should not affect prices
+    # keep 1 Var, no need for further detail
+    # CalcColumnSimilarity(
+    #     Data = dt,
+    #     ColVector = cols[1:2]
+    # )
+    # CalcColumnSimilarity(
+    #     Data = dt,
+    #     ColVector = cols
+    # )
+
+    dt[, (cols[-1]) := NULL] %>%
+        setnames(
+            old = cols[1],
+            new = paste0('n_', cols[1])
+        )
+}
+
+
+# 4) drop geospatial_cols
+
+# 5) clean property info
     # room_type == "Entire home/apt"
     # CollapsePropertyTypes()
     # clean n_bathrooms + accommodates 2-6
