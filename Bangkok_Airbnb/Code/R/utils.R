@@ -8,34 +8,58 @@ LoadLibraries <- function(LibsVector) {
     }))
 }
 
-LoadData <- function() {
-    options(readr.show_progress = FALSE)
 
-    File <- "http://data.insideairbnb.com/thailand/central-thailand/bangkok/2020-12-23/data/listings.csv.gz"
+getDataStoragePath <- function(cwd = getActiveProject(), type = 'Raw') {
+    DataFolder <- grep(type, list.dirs(recursive = TRUE, full.names = FALSE), value = TRUE)
+    StoragePath <- paste0(c(gsub('^/', '', cwd), DataFolder, ''), collapse = '/')
 
-    Raw <- read_csv(
-        File, 
-        show_col_types = FALSE  
-    ) %>% 
-        setDT()
-
-    return(Raw)
+    return(StoragePath)
 }
 
-StoreData <- function(Data, cwd = getActiveProject(), type = 'Raw') {
+StoreData <- function(Data, filepath) {
+    cat('storing raw file as feather/csv...\n')
     Type <- tolower(type)
-    DataFolder <- grep(type, list.dirs(recursive = TRUE, full.names = FALSE), value = TRUE)
-    WritePath <- paste0(c(gsub('^/', '', cwd), DataFolder, ''), collapse = '/')
 
-    Sys.sleep(1) 
-    # data.table seems to be too fast on 4 threads 
-    # see: https://stackoverflow.com/questions/61823407/repeated-data-table-fread-and-fwrite-causes-permission-denied-error
-    fwrite(Data,  paste0(WritePath,"airbnb_bangkok_", Type, ".csv"))
-    saveRDS(Data, paste0(WritePath,"airbnb_bangkok_", Type, ".rds"))
+    arrow::write_csv_arrow(Data, paste0(filepath, "airbnb_bangkok_", Type, ".csv"))
+    arrow::write_feather(Data, paste0(filepath,"airbnb_bangkok_", Type, ".feather"))
 
     outmessage <- paste0('Data written to path: \n', WritePath, '\n')
 
     cat(outmessage)
+}
+
+LoadData <- function() {
+    # new file: 6.3s (readr)
+    # existing: 0.4s (arrow)
+
+    # trouble reading in gzip files with anything else then readr::read_csv()
+        # TODO: store data --> data/Raw/bangkok_20201223.arrow
+            # before reading from net, check if arrow exists with selected city+date
+
+    storagePath <- getDataStoragePath()
+
+    FeatherFilePath <- list.files(path = storagePath, pattern = '.+raw.feather', full.names = TRUE)
+
+    if( length(FeatherFilePath) > 0) {
+        cat('reading existing feather file...\n')
+        Raw <- arrow::read_feather(FeatherFilePath)
+
+    } else {
+        options(readr.show_progress = FALSE)
+
+        cat('reading raw file from AirBnB website...\n')
+        File <- "http://data.insideairbnb.com/thailand/central-thailand/bangkok/2020-12-23/data/listings.csv.gz"
+
+        Raw <- read_csv(
+            File, 
+            show_col_types = FALSE
+        ) %>% 
+            setDT()
+
+        StoreData(Raw, storagePath)
+    }
+
+    return(DropUnusedCols(Raw))
 }
 
 # 2) Cleaning Utils
@@ -196,10 +220,66 @@ AddAmenitiesCols <- function(df) {
 # Cleaning Steps Helpers
 
 # convert logicals
+getBooleanCols <- function() {
+    c("host_is_superhost", "host_has_profile_pic", "host_identity_verified", 
+        "has_availability", "instant_bookable"
+    )
+}
+
+convertBooleans <- function(dt, cols = getBooleanCols()) {
+    dt[, (cols) := lapply(.SD, as.numeric), .SDcols = cols] %>% 
+        setnames(
+            old = cols, 
+            new = paste0("l_",cols)
+        )
+}
+
 # delete id columns
+getIDCols <- function() {
+    c("id" , "scrape_id" , "host_id" , "host_name")
+}
+
+dropIDs <- function(dt, cols = getIDCols()) {
+    dt[, (cols) := NULL]
+}
+
 # clean host info
+getHostCols <- function() {
+    c(
+        "host_since"
+        ,"host_response_rate"
+        ,"host_acceptance_rate"
+        ,"l_host_is_superhost"
+        ,"host_neighbourhood"
+        ,"host_listings_count"
+        ,"host_total_listings_count"
+        ,"host_verifications"
+        ,"l_host_has_profile_pic"
+        ,"l_host_identity_verified"
+    )
+}
+
     # percentize host resp/acceptance rate cols
+getHostPercCols <- function() {c("host_response_rate","host_acceptance_rate")}
+
+coerceCols2Prct <- function(dt, cols = getHostPercCols()) {
+    dt[, (cols) := lapply(.SD, function(x) {
+        gsub('%', '', x) %>% as.numeric()
+    }), .SDcols = cols] %>% 
+        FillNAs(cols) %>% 
+        setnames(
+            old = cols,
+            new = paste0('p_', cols)
+        )
+}
+
     # get nr verifications
+countHostVerifications <- function(dt) {
+    dt[, id := .I] %>% 
+        .[, keyby = id, n_host_verifications := length(str_split(host_verifications, ', ')[[1]])] %>% 
+        .[, (c('id', 'host_verifications')) := NULL]
+}
+
     # clean host_neighbourhood
     # keep host listings cound
 # drop geospatial_cols
